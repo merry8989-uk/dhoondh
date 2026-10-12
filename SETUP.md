@@ -1,15 +1,19 @@
 # Dhoondh — apna search engine (setup)
 
-Ek simple multi-tab search engine jo aap apne browser ke **"Add search engine"** me
-add kar sakte ho. Iski apni public website bhi hai:
+Ek simple multi-tab search engine jo aap apne browser me add kar sakte ho **ya app
+ki tarah install** kar sakte ho. Iski apni public website bhi hai:
 
 **https://merry8989-uk.github.io/dhoondh/**
 
 ## Files
 
 - `index.html` — search page (yahi aapka engine hai)
+- `manifest.webmanifest` — PWA manifest (app naam, icons, shortcuts)
+- `sw.js` — service worker (offline + installable)
+- `icon-192.png`, `icon-512.png`, `icon-maskable-512.png`, `apple-touch-icon.png` — app icons
+- `favicon.svg` — browser icon
 - `opensearch.xml` — browser ko batata hai ise search engine kaise banana hai
-- `favicon.svg` — chhota icon
+- `android/` — Android WebView wrapper project (APK banane ke liye)
 - `README.md` — project overview
 
 Koi server, database ya API key nahi. Results live aate hain **Wikipedia**,
@@ -34,7 +38,38 @@ engines (Google, Bing, YouTube, Google Scholar, etc.) ke links bhi diye jaate ha
 
 ---
 
-## Add to Chrome / Edge
+## 1. App ki tarah install karo (PWA — sabse aasan)
+
+Koi APK ya store ki zaroorat nahi. Site ek PWA hai:
+
+- **Android (Chrome):** site kholo → menu → **Add to Home screen** / **Install app**
+  (header me "Install app" button bhi aa jaata hai jab available ho).
+- **Desktop (Chrome/Edge):** address bar me install icon.
+- **iPhone (Safari):** Share → **Add to Home Screen**.
+
+App apni alag window me Dhoondh icon ke saath khulta hai, aur offline bhi shell chalta hai.
+
+## 2. Android APK banao
+
+Do tareeke:
+
+**A. Bina code — PWABuilder (signed APK seedha milta hai):**
+1. Kholo <https://www.pwabuilder.com/>
+2. URL daalo: `https://merry8989-uk.github.io/dhoondh/` → **Start**
+3. **Android** → **Generate Package** → `.apk` / `.aab` download karo (PWABuilder sign kar deta hai).
+
+**B. Khud build karo (Android Studio):**
+1. Is repo ka `android/` folder Android Studio me **Open** karo.
+2. Gradle sync hone do.
+3. **Build → Build Bundle(s) / APK(s) → Build APK(s)**.
+4. APK: `android/app/build/outputs/apk/debug/app-debug.apk`.
+   Detail: `android/README.md`.
+
+> Note: ye environment (jahan ye files bani) me Java/Gradle/Android SDK nahi hai,
+> isliye APK yahin build nahi hua — par `android/` project aur PWABuilder dono se
+> aap turant APK bana sakte ho.
+
+## 3. Browser me search engine add karo (Chrome / Edge)
 
 1. Address bar me kholo: **https://merry8989-uk.github.io/dhoondh/**
 2. Settings → **Search engine** → **Manage search engines and site search** → **Add**
@@ -42,12 +77,11 @@ engines (Google, Bing, YouTube, Google Scholar, etc.) ke links bhi diye jaate ha
    - **Search engine:** `Dhoondh`
    - **Shortcut:** `dh`
    - **URL with %s in place of query:** `https://merry8989-uk.github.io/dhoondh/?q=%s`
-4. Save. Ab address bar me `dh` type karke **Tab** dabao, phir kuchh bhi search karo.
+4. Save. Ab address bar me `dh` type karke **Tab** dabao, phir search karo.
 
-## Add to Firefox
+## 4. Firefox me add karo
 
-1. Kholo: **https://merry8989-uk.github.io/dhoondh/** — page par search-engine
-   ("+") icon dikhega, usse add karo (OpenSearch autodiscovery `index.html` me laga hai).
+1. Kholo: **https://merry8989-uk.github.io/dhoondh/** — search-engine ("+") icon se add karo.
 2. Ya search box me `opensearch.xml` ka pura URL daalo:
    `https://merry8989-uk.github.io/dhoondh/opensearch.xml`
 
@@ -55,16 +89,12 @@ engines (Google, Bing, YouTube, Google Scholar, etc.) ke links bhi diye jaate ha
 
 ## Apni copy host karna (optional)
 
-Chaho to ye files apne kisi bhi static host par daal sakte ho:
-
 - **GitHub Pages** — ye repo already isi ke liye ready hai. Settings → Pages →
-  Source: "Deploy from a branch" → Branch `main`, folder `/ (root)` → Save.
-  URL milega `https://<username>.github.io/dhoondh/`.
-- **Netlify Drop** — <https://app.netlify.com/drop> par saari files ek folder me
-  drag-and-drop karo, turant URL mil jaayega.
+  Branch `main`, folder `/ (root)` → Save.
+- **Netlify Drop** — <https://app.netlify.com/drop> par saari files drag-and-drop karo.
 
-Phir `opensearch.xml` me `https://merry8989-uk.github.io/dhoondh/` ko apne URL se
-badal do, aur Chrome me wahi URL `?q=%s` ke saath daalo.
+Phir `opensearch.xml`, `manifest.webmanifest` aur Chrome ke URL me
+`https://merry8989-uk.github.io/dhoondh/` ko apne URL se badal do.
 
 ## Tips
 

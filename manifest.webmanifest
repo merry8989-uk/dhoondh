@@ -1,0 +1,56 @@
+{
+  "name": "Dhoondh — Apna Search Engine",
+  "short_name": "Dhoondh",
+  "description": "Multi-tab search engine: All, AI, Images, Videos, YouTube, Papers, Books/EPUB, PDF, PPT, Drive, Terabox, Archive.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#0d1017",
+  "theme_color": "#4f46e5",
+  "lang": "en-IN",
+  "dir": "ltr",
+  "categories": [
+    "search",
+    "utilities",
+    "productivity"
+  ],
+  "icons": [
+    {
+      "src": "icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icon-maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Ask AI (Sarvam Indus)",
+      "url": "./?tab=ai"
+    },
+    {
+      "name": "Images",
+      "url": "./?tab=images"
+    },
+    {
+      "name": "Papers",
+      "url": "./?tab=papers"
+    },
+    {
+      "name": "Books / EPUB",
+      "url": "./?tab=books"
+    }
+  ]
+}

@@ -7,6 +7,12 @@
 <meta name="description" content="A simple multi-tab search engine you can add to your browser.">
 <link rel="icon" href="favicon.svg" type="image/svg+xml">
 <link rel="search" type="application/opensearchdescription+xml" title="Dhoondh" href="opensearch.xml">
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#4f46e5">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Dhoondh">
 <style>
   :root{
     --bg:#f6f7fb; --panel:#ffffff; --text:#141a24; --muted:#5b6473;
@@ -45,6 +51,11 @@
     padding:7px 10px; border-radius:10px; border:1px solid var(--border);
     background:var(--panel); color:var(--text); font-size:13px; cursor:pointer;
   }
+
+  .install{padding:8px 14px; border-radius:10px; border:none; color:#fff; font-weight:600;
+    font-size:13px; background:linear-gradient(135deg,var(--accent),var(--accent2));
+    cursor:pointer; font-family:inherit; margin-left:auto; white-space:nowrap}
+  .install:hover{filter:brightness(1.07)}
 
   main{flex:1; width:100%; max-width:880px; margin:0 auto; padding:24px 20px 60px}
 
@@ -129,6 +140,7 @@
 <body>
 <header>
   <div class="brand"><span class="dot">D</span> Dhoondh <small>apna search engine</small></div>
+  <button id="install" class="install" hidden>Install app</button>
   <div class="lang"><select id="lang" aria-label="Wikipedia language"></select></div>
 </header>
 
@@ -577,6 +589,26 @@
   document.addEventListener("keydown", function(e){
     if(e.key === "/" && document.activeElement !== input){ e.preventDefault(); input.focus(); }
   });
+
+  // ---- PWA: service worker + install prompt ----
+  if("serviceWorker" in navigator){
+    window.addEventListener("load", function(){
+      navigator.serviceWorker.register("sw.js").catch(function(){});
+    });
+  }
+  var deferredPrompt = null;
+  var installBtn = document.getElementById("install");
+  window.addEventListener("beforeinstallprompt", function(e){
+    e.preventDefault(); deferredPrompt = e; if(installBtn) installBtn.hidden = false;
+  });
+  if(installBtn){
+    installBtn.addEventListener("click", function(){
+      if(!deferredPrompt) return;
+      deferredPrompt.prompt();
+      deferredPrompt.userChoice.then(function(){ deferredPrompt = null; installBtn.hidden = true; });
+    });
+  }
+  window.addEventListener("appinstalled", function(){ if(installBtn) installBtn.hidden = true; });
 
   render();
 })();
