@@ -38,6 +38,17 @@ engines (Google, Bing, YouTube, Google Scholar, etc.) ke links bhi diye jaate ha
 
 ---
 
+## Default search engine
+
+By default Dhoondh aapki search **DuckDuckGo** par bhejta hai. Header me **"Search with"**
+selector hai — DuckDuckGo (default), Google, Brave, Bing, Yandex, Startpage chuno, aur har
+search wahin asli web results ke saath khulegi. **"Dhoondh (tabs)"** chuno to in-app tabs
+wala experience milega (Wikipedia + Internet Archive + Commons + saare tabs).
+
+Kyun hand-off? DuckDuckGo/Google/Brave/Yandex koi public, CORS-friendly results API nahi
+dete, isliye ek static page unke results embed nahi kar sakta — khol deta hai. In-app tabs
+wo free sources use karte hain jo allow karte hain (Wikipedia, Internet Archive, Commons).
+
 ## 1. App ki tarah install karo (PWA — sabse aasan)
 
 Koi APK ya store ki zaroorat nahi. Site ek PWA hai:

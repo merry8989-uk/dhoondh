@@ -73,6 +73,19 @@ No server, no build step, no API key. Open `index.html` and it works.
 See `SETUP.md`. Quick version (Chrome/Edge): Settings → Search engines → Add →
 URL `https://merry8989-uk.github.io/dhoondh/?q=%s`, shortcut `dh`.
 
+## Default search engine
+
+Dhoondh hands your search to **DuckDuckGo** by default. The header has a **"Search with"**
+selector — pick DuckDuckGo (default), Google, Brave, Bing, Yandex or Startpage, and every
+search opens there with real web results. Pick **"Dhoondh (tabs)"** to use the in-app
+multi-tab experience instead (Wikipedia + Internet Archive + Commons, plus the specialised
+tabs).
+
+Why hand off? DuckDuckGo, Google, Brave and Yandex publish no public, CORS-friendly
+results API, so a static page cannot embed their results — it opens them instead. The
+in-app tabs use the free sources that *do* allow it (Wikipedia, Internet Archive,
+Wikimedia Commons).
+
 ## Contact / Feedback
 
 Suggestion, feedback ya naya feature chahiye? Instagram par

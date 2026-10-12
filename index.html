@@ -53,6 +53,11 @@
     padding:7px 10px; border-radius:10px; border:1px solid var(--border);
     background:var(--panel); color:var(--text); font-size:13px; cursor:pointer;
   }
+  .engwrap{display:flex; align-items:center; gap:7px; font-size:13px; color:var(--muted)}
+  .engwrap select{
+    padding:7px 10px; border-radius:10px; border:1px solid var(--border);
+    background:var(--panel); color:var(--text); font-size:13px; cursor:pointer; font-family:inherit;
+  }
 
   .install{padding:8px 14px; border-radius:10px; border:none; color:#fff; font-weight:600;
     font-size:13px; background:linear-gradient(135deg,var(--accent),var(--accent2));
@@ -138,6 +143,7 @@
     form.search{flex-wrap:wrap}
     form.search button{width:100%}
     .card.answer img{display:none}
+    .englab{display:none}
   }
 </style>
 </head>
@@ -145,6 +151,7 @@
 <header>
   <div class="brand"><span class="dot">D</span> Dhoondh <small>apna search engine</small></div>
   <div class="hdr-right">
+    <label class="engwrap"><span class="englab">Search with</span><select id="engine" aria-label="Default search engine"></select></label>
     <a class="btn ghost" href="https://instagram.com/osintgram_io" target="_blank" rel="noopener" title="Suggestion, feedback ya feature request — Instagram @osintgram_io">Feedback</a>
     <button id="install" class="install" hidden>Install app</button>
     <div class="lang"><select id="lang" aria-label="Wikipedia language"></select></div>
@@ -192,6 +199,51 @@
   ];
   var lang = localStorage.getItem("dhoondh.lang") || "en";
   if(!LANGS.some(function(l){return l[0]===lang;})) lang = "en";
+
+  // ---- default search engine (DuckDuckGo by default) ----
+  var SEARCH_ENGINES = [
+    ["duckduckgo","DuckDuckGo","https://duckduckgo.com/?q=%s"],
+    ["google","Google","https://www.google.com/search?q=%s"],
+    ["brave","Brave","https://search.brave.com/search?q=%s"],
+    ["bing","Bing","https://www.bing.com/search?q=%s"],
+    ["yandex","Yandex","https://yandex.com/search/?text=%s"],
+    ["startpage","Startpage","https://www.startpage.com/sp/search?query=%s"],
+    ["dhoondh","Dhoondh (tabs)",""]
+  ];
+  var engSel = document.getElementById("engine");
+  var engine = localStorage.getItem("dhoondh.engine") || "duckduckgo";
+  if(!SEARCH_ENGINES.some(function(e){ return e[0] === engine; })) engine = "duckduckgo";
+  function engineDef(id){
+    for(var i=0;i<SEARCH_ENGINES.length;i++){ if(SEARCH_ENGINES[i][0] === id) return SEARCH_ENGINES[i]; }
+    return null;
+  }
+  function engineURL(id, query){
+    var d = engineDef(id);
+    return (d && d[2]) ? d[2].replace("%s", encodeURIComponent(query)) : null;
+  }
+  SEARCH_ENGINES.forEach(function(e){
+    var o = document.createElement("option");
+    o.value = e[0]; o.textContent = e[1];
+    if(e[0] === engine) o.selected = true;
+    engSel.appendChild(o);
+  });
+  engSel.addEventListener("change", function(){
+    engine = engSel.value; localStorage.setItem("dhoondh.engine", engine);
+    if(engine !== "dhoondh"){ var u = engineURL(engine, input.value.trim()); if(u) location.href = u; }
+  });
+  // Searching sends you to the chosen engine (DuckDuckGo by default).
+  document.getElementById("searchForm").addEventListener("submit", function(ev){
+    var v = input.value.trim();
+    if(!v){ ev.preventDefault(); return; }
+    var url = engineURL(engine, v);
+    if(url){ ev.preventDefault(); location.href = url; }
+  });
+  // A search that arrives with ?q= (e.g. from the browser search box) is handed to
+  // the default engine — unless a specific tab was requested.
+  if(q && !params.get("tab")){
+    var fwd = engineURL(engine, q);
+    if(fwd){ location.replace(fwd); return; }
+  }
 
   var TABS = [
     ["all","All"], ["ai","AI"], ["images","Images"], ["videos","Videos"],
@@ -499,9 +551,35 @@
   }
 
   // ---------- per-tab content ----------
+  // DuckDuckGo leads the All tab. Dhoondh can't embed DDG results (DDG publishes no
+  // public, CORS-friendly results API), so it hands the search off with one click.
+  function webPanel(){
+    var card = el("div","card answer");
+    card.appendChild(el("h3", null, "DuckDuckGo — poora web search"));
+    card.appendChild(el("p","extract", "Dhoondh DuckDuckGo ke results embed nahi kar sakta (DDG apna public results API nahi deta), isliye ek click me wahin kholte hain."));
+    var a = el("a","btn hl");
+    a.href = "https://duckduckgo.com/?q=" + enc(q);
+    a.target = "_blank"; a.rel = "noopener";
+    a.textContent = "DuckDuckGo par \u201c" + q + "\u201d kholo \u2192";
+    a.style.display = "inline-block"; a.style.marginTop = "12px";
+    card.appendChild(a);
+    var row = el("div","chips"); row.style.marginTop = "14px";
+    [["Google","https://www.google.com/search?q=%s"],["Brave","https://search.brave.com/search?q=%s"],
+     ["Bing","https://www.bing.com/search?q=%s"],["Yandex","https://yandex.com/search/?text=%s"]].forEach(function(e){
+      var l = document.createElement("a");
+      l.className = "btn"; l.href = e[1].replace("%s", enc(q));
+      l.target = "_blank"; l.rel = "noopener"; l.textContent = e[0];
+      row.appendChild(l);
+    });
+    card.appendChild(row);
+    return card;
+  }
+
   async function tabAll(){
-    var hits = await wikiSearch(q).catch(function(){ return []; });
     var frag = document.createDocumentFragment();
+    frag.appendChild(label("Web results \u00b7 DuckDuckGo"));
+    frag.appendChild(webPanel());
+    var hits = await wikiSearch(q).catch(function(){ return []; });
     if(hits.length){
       var top = hits.slice(0,7);
       var sums = await Promise.all(top.map(function(h){ return wikiSummary(h.title); }));
@@ -512,7 +590,7 @@
       top.forEach(function(h,i){ if(i === ansIdx) return; wrap.appendChild(resultRow(h, sums[i])); });
       if(wrap.childNodes.length){ frag.appendChild(label("Wikipedia")); frag.appendChild(wrap); }
     } else {
-      frag.appendChild(el("div","card","Koi Wikipedia result nahi mila."));
+      frag.appendChild(el("p","note","Wikipedia par is query ka article nahi mila — upar DuckDuckGo se poora web dekho."));
     }
     frag.appendChild(label("Aur engines par search karo"));
     frag.appendChild(linkButtons(LINKS.all));
