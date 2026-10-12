@@ -219,7 +219,8 @@
   function backendQuery(b, query){
     return b + (b.indexOf("?") >= 0 ? "&" : "?") + "q=" + encodeURIComponent(query);
   }
-  var backend = normalizeBackend(localStorage.getItem("dhoondh.backend") || "");
+  var DEFAULT_BACKEND = "https://dhoondh-search.br19shc39.workers.dev";
+  var backend = normalizeBackend(localStorage.getItem("dhoondh.backend") || DEFAULT_BACKEND);
   var backendInput = document.getElementById("backend");
   var backendMsg = document.getElementById("backendMsg");
   if(backendInput) backendInput.value = backend;
