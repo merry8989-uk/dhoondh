@@ -73,6 +73,12 @@ No server, no build step, no API key. Open `index.html` and it works.
 See `SETUP.md`. Quick version (Chrome/Edge): Settings → Search engines → Add →
 URL `https://merry8989-uk.github.io/dhoondh/?q=%s`, shortcut `dh`.
 
+## Contact / Feedback
+
+Suggestion, feedback ya naya feature chahiye? Instagram par
+[@osintgram_io](https://instagram.com/osintgram_io) par message karo — the app has a
+**Feedback** button in the header and a contact line in the footer that go there.
+
 ## License
 
 MIT — do what you like.

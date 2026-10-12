@@ -96,6 +96,12 @@ Do tareeke:
 Phir `opensearch.xml`, `manifest.webmanifest` aur Chrome ke URL me
 `https://merry8989-uk.github.io/dhoondh/` ko apne URL se badal do.
 
+## Contact / Feedback
+
+App ke header me **Feedback** button hai (aur footer me bhi contact line) — dono
+seedha Instagram **[@osintgram_io](https://instagram.com/osintgram_io)** par le jaate
+hain. Suggestion, feedback ya naya feature request wahin bhej sakte ho.
+
 ## Tips
 
 - Seedha URL se bhi search: `https://merry8989-uk.github.io/dhoondh/?q=ISRO`

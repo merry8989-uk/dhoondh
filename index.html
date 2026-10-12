@@ -37,7 +37,7 @@
   a:hover{text-decoration:underline}
 
   header{
-    display:flex; align-items:center; gap:14px; padding:14px 20px;
+    display:flex; align-items:center; flex-wrap:wrap; gap:14px; padding:14px 20px;
     border-bottom:1px solid var(--border); background:var(--panel);
     position:sticky; top:0; z-index:5;
   }
@@ -46,7 +46,9 @@
     background:linear-gradient(135deg,var(--accent),var(--accent2));
     display:inline-flex;align-items:center;justify-content:center;color:#fff;font-size:14px}
   .brand small{font-weight:500;color:var(--muted);font-size:12px}
-  header .lang{margin-left:auto}
+  .hdr-right{margin-left:auto; display:flex; align-items:center; gap:10px}
+  .ghost{background:transparent; border:1px solid var(--border); color:var(--text)}
+  .ghost:hover{border-color:var(--accent); color:var(--accent)}
   header .lang select{
     padding:7px 10px; border-radius:10px; border:1px solid var(--border);
     background:var(--panel); color:var(--text); font-size:13px; cursor:pointer;
@@ -54,7 +56,7 @@
 
   .install{padding:8px 14px; border-radius:10px; border:none; color:#fff; font-weight:600;
     font-size:13px; background:linear-gradient(135deg,var(--accent),var(--accent2));
-    cursor:pointer; font-family:inherit; margin-left:auto; white-space:nowrap}
+    cursor:pointer; font-family:inherit; white-space:nowrap}
   .install:hover{filter:brightness(1.07)}
 
   main{flex:1; width:100%; max-width:880px; margin:0 auto; padding:24px 20px 60px}
@@ -129,6 +131,8 @@
 
   footer{border-top:1px solid var(--border); padding:16px 20px; text-align:center;
     color:var(--muted); font-size:12.5px}
+  footer .contact{margin-top:8px; font-size:13px; color:var(--text)}
+  footer .contact a{font-weight:600}
   @media(max-width:520px){
     .hero h1{font-size:30px}
     form.search{flex-wrap:wrap}
@@ -140,8 +144,11 @@
 <body>
 <header>
   <div class="brand"><span class="dot">D</span> Dhoondh <small>apna search engine</small></div>
-  <button id="install" class="install" hidden>Install app</button>
-  <div class="lang"><select id="lang" aria-label="Wikipedia language"></select></div>
+  <div class="hdr-right">
+    <a class="btn ghost" href="https://instagram.com/osintgram_io" target="_blank" rel="noopener" title="Suggestion, feedback ya feature request — Instagram @osintgram_io">Feedback</a>
+    <button id="install" class="install" hidden>Install app</button>
+    <div class="lang"><select id="lang" aria-label="Wikipedia language"></select></div>
+  </div>
 </header>
 
 <main>
@@ -161,7 +168,8 @@
 </main>
 
 <footer>
-  Dhoondh · free sources (Wikipedia · Internet Archive · Wikimedia Commons) + one-click to real engines
+  <div>Dhoondh · free sources (Wikipedia · Internet Archive · Wikimedia Commons) + one-click to real engines</div>
+  <div class="contact">Suggestion, feedback ya naya feature chahiye? Instagram par <a href="https://instagram.com/osintgram_io" target="_blank" rel="noopener">@osintgram_io</a> par message karo.</div>
 </footer>
 
 <script>
