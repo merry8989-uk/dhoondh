@@ -1,0 +1,585 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Dhoondh — Apna Search Engine</title>
+<meta name="description" content="A simple multi-tab search engine you can add to your browser.">
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<link rel="search" type="application/opensearchdescription+xml" title="Dhoondh" href="opensearch.xml">
+<style>
+  :root{
+    --bg:#f6f7fb; --panel:#ffffff; --text:#141a24; --muted:#5b6473;
+    --accent:#4f46e5; --accent2:#0ea5e9; --border:#e6e8ef; --mark:#fff3b0;
+    --shadow:0 8px 30px rgba(20,26,36,.08);
+  }
+  @media (prefers-color-scheme: dark){
+    :root{
+      --bg:#0d1017; --panel:#161b25; --text:#e8ecf3; --muted:#9aa4b2;
+      --accent:#8b8cf7; --accent2:#38bdf8; --border:#252c39; --mark:#5b4b00;
+      --shadow:0 8px 30px rgba(0,0,0,.4);
+    }
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0}
+  body{
+    background:var(--bg); color:var(--text);
+    font:16px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    min-height:100vh; display:flex; flex-direction:column;
+  }
+  a{color:var(--accent); text-decoration:none}
+  a:hover{text-decoration:underline}
+
+  header{
+    display:flex; align-items:center; gap:14px; padding:14px 20px;
+    border-bottom:1px solid var(--border); background:var(--panel);
+    position:sticky; top:0; z-index:5;
+  }
+  .brand{display:flex; align-items:center; gap:10px; font-weight:700; font-size:19px}
+  .brand .dot{width:26px;height:26px;border-radius:8px;
+    background:linear-gradient(135deg,var(--accent),var(--accent2));
+    display:inline-flex;align-items:center;justify-content:center;color:#fff;font-size:14px}
+  .brand small{font-weight:500;color:var(--muted);font-size:12px}
+  header .lang{margin-left:auto}
+  header .lang select{
+    padding:7px 10px; border-radius:10px; border:1px solid var(--border);
+    background:var(--panel); color:var(--text); font-size:13px; cursor:pointer;
+  }
+
+  main{flex:1; width:100%; max-width:880px; margin:0 auto; padding:24px 20px 60px}
+
+  .hero{text-align:center; padding-top:9vh}
+  .hero h1{font-size:40px; margin:0 0 6px;
+    background:linear-gradient(135deg,var(--accent),var(--accent2));
+    -webkit-background-clip:text; background-clip:text; color:transparent}
+  .hero p{color:var(--muted); margin:0 0 26px}
+
+  form.search{display:flex; gap:10px; width:100%}
+  form.search input{
+    flex:1; padding:15px 18px; font-size:17px; border-radius:14px;
+    border:1px solid var(--border); background:var(--panel); color:var(--text);
+    box-shadow:var(--shadow); outline:none;
+  }
+  form.search input:focus{border-color:var(--accent)}
+  form.search button{
+    padding:15px 24px; font-size:16px; font-weight:600; border:none; border-radius:14px;
+    color:#fff; background:linear-gradient(135deg,var(--accent),var(--accent2));
+    cursor:pointer; box-shadow:var(--shadow);
+  }
+  form.search button:hover{filter:brightness(1.07)}
+
+  .tabs{display:flex; gap:2px; overflow-x:auto; margin:16px 0 2px;
+    border-bottom:1px solid var(--border); scrollbar-width:thin}
+  .tab{padding:10px 14px; font-size:14px; border:none; background:none; color:var(--muted);
+    cursor:pointer; border-bottom:2px solid transparent; white-space:nowrap; font-family:inherit}
+  .tab:hover{color:var(--text)}
+  .tab.active{color:var(--accent); border-bottom-color:var(--accent); font-weight:600}
+
+  .chips{display:flex; flex-wrap:wrap; gap:8px; margin:16px 0 4px}
+  .chips a, .btn{
+    font-size:13.5px; padding:8px 13px; border-radius:999px;
+    border:1px solid var(--border); background:var(--panel); color:var(--text);
+    cursor:pointer; font-family:inherit; text-decoration:none; display:inline-block;
+  }
+  .chips a:hover, .btn:hover{border-color:var(--accent); color:var(--accent); text-decoration:none}
+  .btn.hl{background:linear-gradient(135deg,var(--accent),var(--accent2)); color:#fff; border:none; font-weight:600}
+
+  .label{font-size:12px; text-transform:uppercase; letter-spacing:.9px; color:var(--muted);
+    margin:24px 0 10px; font-weight:700}
+  .note{color:var(--muted); font-size:14px; margin:6px 0 0}
+
+  .card{background:var(--panel); border:1px solid var(--border); border-radius:16px;
+    padding:18px 20px; box-shadow:var(--shadow); margin-bottom:14px}
+  .card.answer{border-left:4px solid var(--accent)}
+  .card.answer h3{margin:0 0 8px; font-size:19px}
+  .card.answer .extract{color:var(--muted); margin:0}
+  .card.answer .top{display:flex; gap:16px; align-items:flex-start}
+  .card.answer img{width:96px;height:96px;border-radius:12px;object-fit:cover;flex:0 0 96px}
+  .card.answer .more{display:inline-block; margin-top:12px; font-size:13.5px}
+
+  .result{display:flex; gap:14px; padding:14px 0; border-bottom:1px solid var(--border)}
+  .result:last-child{border-bottom:none}
+  .result .thumb{width:72px;height:72px;border-radius:10px;object-fit:cover;
+    background:var(--border); flex:0 0 72px}
+  .result h3{margin:0 0 4px; font-size:16.5px}
+  .result p{margin:0; color:var(--muted); font-size:14.5px}
+  .result .src{font-size:12.5px; color:var(--muted); margin-top:6px}
+  .badge{display:inline-block; font-size:11px; padding:1px 7px; border-radius:999px;
+    background:var(--border); color:var(--muted); margin-left:2px}
+  mark{background:var(--mark); color:inherit; border-radius:3px; padding:0 2px}
+
+  .grid{display:grid; grid-template-columns:repeat(auto-fill,minmax(150px,1fr)); gap:12px}
+  .tile img{width:100%; height:120px; object-fit:cover; border-radius:10px; display:block; background:var(--border)}
+  .tile span{font-size:12px; color:var(--muted); display:block; margin-top:6px;
+    overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+  .tile:hover span{color:var(--accent)}
+
+  .status{color:var(--muted); font-size:14px; padding:8px 0}
+
+  footer{border-top:1px solid var(--border); padding:16px 20px; text-align:center;
+    color:var(--muted); font-size:12.5px}
+  @media(max-width:520px){
+    .hero h1{font-size:30px}
+    form.search{flex-wrap:wrap}
+    form.search button{width:100%}
+    .card.answer img{display:none}
+  }
+</style>
+</head>
+<body>
+<header>
+  <div class="brand"><span class="dot">D</span> Dhoondh <small>apna search engine</small></div>
+  <div class="lang"><select id="lang" aria-label="Wikipedia language"></select></div>
+</header>
+
+<main>
+  <section id="home" class="hero" hidden>
+    <h1>Dhoondh</h1>
+    <p>Internet se kuchh bhi dhoondho — ek hi jagah.</p>
+  </section>
+
+  <form class="search" id="searchForm" method="get" action="" role="search">
+    <input id="q" name="q" type="search" list="sugg" placeholder="Kuchh bhi search karo…" autocomplete="off" autofocus aria-label="Search query">
+    <datalist id="sugg"></datalist>
+    <button type="submit">Search</button>
+  </form>
+
+  <nav class="tabs" id="tabs" aria-label="Result types" hidden></nav>
+  <div id="results" aria-live="polite"></div>
+</main>
+
+<footer>
+  Dhoondh · free sources (Wikipedia · Internet Archive · Wikimedia Commons) + one-click to real engines
+</footer>
+
+<script>
+(function(){
+  "use strict";
+  var params = new URLSearchParams(location.search);
+  var q = (params.get("q") || "").trim();
+  var tab = params.get("tab") || "all";
+  var input = document.getElementById("q");
+  var home = document.getElementById("home");
+  var results = document.getElementById("results");
+  var tabsEl = document.getElementById("tabs");
+  var sugg = document.getElementById("sugg");
+  var langSel = document.getElementById("lang");
+
+  var LANGS = [
+    ["en","English"], ["hi","हिन्दी"], ["ta","தமிழ்"], ["te","తెలుగు"],
+    ["bn","বাংলা"], ["mr","मराठी"], ["gu","ગુજરાતી"], ["kn","ಕನ್ನಡ"],
+    ["ml","മലയാളം"], ["pa","ਪੰਜਾਬੀ"]
+  ];
+  var lang = localStorage.getItem("dhoondh.lang") || "en";
+  if(!LANGS.some(function(l){return l[0]===lang;})) lang = "en";
+
+  var TABS = [
+    ["all","All"], ["ai","AI"], ["images","Images"], ["videos","Videos"],
+    ["youtube","YouTube"], ["papers","Papers"], ["books","Books / EPUB"],
+    ["pdf","PDF"], ["ppt","PPT"], ["drive","Drive"], ["terabox","Terabox"],
+    ["archive","Archive"]
+  ];
+
+  // ---- link-out sets (%s = query). Open in a new tab. ----
+  var LINKS = {
+    all: [
+      ["Google","https://www.google.com/search?q=%s"],
+      ["DuckDuckGo","https://duckduckgo.com/?q=%s"],
+      ["Bing","https://www.bing.com/search?q=%s"],
+      ["Brave","https://search.brave.com/search?q=%s"],
+      ["YouTube","https://www.youtube.com/results?search_query=%s"],
+      ["Images","https://www.google.com/search?tbm=isch&q=%s"],
+      ["News","https://news.google.com/search?q=%s"],
+      ["Maps","https://www.google.com/maps/search/%s"]
+    ],
+    ai: [
+      ["Sarvam Indus AI","https://indus.sarvam.ai/",1],
+      ["Sarvam AI app","https://www.sarvam.ai/app"],
+      ["ChatGPT","https://chatgpt.com/?q=%s"],
+      ["Perplexity","https://www.perplexity.ai/search?q=%s"],
+      ["Gemini","https://gemini.google.com/app"],
+      ["Claude","https://claude.ai/new?q=%s"],
+      ["Copilot","https://copilot.microsoft.com/?q=%s"],
+      ["Grok","https://grok.com/?q=%s"],
+      ["DeepSeek","https://chat.deepseek.com/"],
+      ["You.com","https://you.com/search?q=%s"]
+    ],
+    images: [
+      ["Google Images","https://www.google.com/search?tbm=isch&q=%s"],
+      ["Bing Images","https://www.bing.com/images/search?q=%s"],
+      ["Unsplash","https://unsplash.com/s/photos/%s"],
+      ["Pexels","https://www.pexels.com/search/%s/"],
+      ["Openverse","https://openverse.org/search/image?q=%s"],
+      ["Wikimedia Commons","https://commons.wikimedia.org/w/index.php?search=%s"]
+    ],
+    videos: [
+      ["YouTube","https://www.youtube.com/results?search_query=%s"],
+      ["Google Videos","https://www.google.com/search?tbm=vid&q=%s"],
+      ["Vimeo","https://vimeo.com/search?q=%s"],
+      ["Dailymotion","https://www.dailymotion.com/search/%s/videos"]
+    ],
+    youtube: [
+      ["YouTube","https://www.youtube.com/results?search_query=%s"],
+      ["YouTube Music","https://music.youtube.com/search?q=%s"],
+      ["Shorts","https://www.youtube.com/results?search_query=%s+shorts"],
+      ["Latest uploads","https://www.youtube.com/results?search_query=%s&sp=CAI%3D"]
+    ],
+    papers: [
+      ["Google Scholar","https://scholar.google.com/scholar?q=%s"],
+      ["arXiv","https://arxiv.org/search/?query=%s&searchtype=all"],
+      ["Semantic Scholar","https://www.semanticscholar.org/search?q=%s"],
+      ["OpenAlex","https://openalex.org/works?search=%s"],
+      ["CORE","https://core.ac.uk/search?q=%s"],
+      ["PubMed","https://pubmed.ncbi.nlm.nih.gov/?term=%s"],
+      ["ResearchGate","https://www.researchgate.net/search?q=%s"],
+      ["SSRN","https://papers.ssrn.com/sol3/results.cfm?txtKey_Words=%s"]
+    ],
+    books: [
+      ["Project Gutenberg","https://www.gutenberg.org/ebooks/search/?query=%s"],
+      ["Open Library","https://openlibrary.org/search?q=%s"],
+      ["Standard Ebooks","https://standardebooks.org/ebooks?query=%s"],
+      ["Google Books","https://www.google.com/search?tbm=bks&q=%s"],
+      ["Internet Archive","https://archive.org/search?query=%s&and[]=mediatype%3A%22texts%22"]
+    ],
+    pdf: [
+      ["Google (filetype:pdf)","https://www.google.com/search?q=%s+filetype%3Apdf"],
+      ["Bing (filetype:pdf)","https://www.bing.com/search?q=%s+filetype%3Apdf"],
+      ["Google Scholar (pdf)","https://scholar.google.com/scholar?q=%s+filetype%3Apdf"],
+      ["Internet Archive","https://archive.org/search?query=%s&and[]=mediatype%3A%22texts%22"]
+    ],
+    ppt: [
+      ["Google (ppt/pptx)","https://www.google.com/search?q=%s+(filetype%3Appt+OR+filetype%3Apptx)"],
+      ["Bing (ppt/pptx)","https://www.bing.com/search?q=%s+(filetype%3Appt+OR+filetype%3Apptx)"],
+      ["SlideShare","https://www.slideshare.net/search/slideshow?searchfrom=header&q=%s"],
+      ["Internet Archive","https://archive.org/search?query=%s&and[]=mediatype%3A%22texts%22"]
+    ],
+    drive: [
+      ["Drive folders (public)","https://www.google.com/search?q=%s+site%3Adrive.google.com+%22folders%22"],
+      ["Drive — everything","https://www.google.com/search?q=%s+site%3Adrive.google.com"],
+      ["Drive PDFs","https://www.google.com/search?q=%s+site%3Adrive.google.com+filetype%3Apdf"],
+      ["Drive docs","https://www.google.com/search?q=%s+site%3Adocs.google.com"],
+      ["Drive sheets","https://www.google.com/search?q=%s+site%3Adocs.google.com/spreadsheets"],
+      ["Drive videos","https://www.google.com/search?q=%s+site%3Adrive.google.com+(filetype%3Amp4+OR+filetype%3Amkv+OR+filetype%3Aavi)"],
+      ["Drive audio","https://www.google.com/search?q=%s+site%3Adrive.google.com+(filetype%3Amp3+OR+filetype%3Awav+OR+filetype%3Am4a)"]
+    ],
+    terabox: [
+      ["Terabox (site search)","https://www.google.com/search?q=%s+site%3Aterabox.com"],
+      ["Terabox app links","https://www.google.com/search?q=%s+site%3Ateraboxapp.com"],
+      ["1024tera","https://www.google.com/search?q=%s+site%3A1024tera.com"],
+      ["Terabox (Bing)","https://www.bing.com/search?q=%s+site%3Aterabox.com"]
+    ],
+    archive: [
+      ["Internet Archive (all)","https://archive.org/search?query=%s"],
+      ["Texts","https://archive.org/search?query=%s&and[]=mediatype%3A%22texts%22"],
+      ["Movies","https://archive.org/search?query=%s&and[]=mediatype%3A%22movies%22"],
+      ["Audio","https://archive.org/search?query=%s&and[]=mediatype%3A%22audio%22"],
+      ["Wayback Machine","https://web.archive.org/web/*/%s"]
+    ]
+  };
+
+  // tabs that fetch real in-page results
+  var FETCHERS = { all:1, images:1, videos:1, papers:1, books:1, pdf:1, archive:1 };
+
+  function esc(s){
+    return String(s == null ? "" : s).replace(/&/g,"&amp;").replace(/</g,"&lt;")
+      .replace(/>/g,"&gt;").replace(/"/g,"&quot;");
+  }
+  function el(tag, cls, html){
+    var n = document.createElement(tag);
+    if(cls) n.className = cls;
+    if(html != null) n.innerHTML = html;
+    return n;
+  }
+  function label(text){ return el("div","label", esc(text)); }
+  function enc(s){ return encodeURIComponent(s); }
+
+  function cleanNodes(node, out){
+    for(var i=0;i<node.childNodes.length;i++){
+      var c = node.childNodes[i];
+      if(c.nodeType === 3){ out.push(esc(c.nodeValue)); }
+      else if(c.nodeType === 1){
+        var isMark = c.tagName === "SPAN" && String(c.className).indexOf("searchmatch") !== -1;
+        if(isMark) out.push("<mark>");
+        cleanNodes(c, out);
+        if(isMark) out.push("</mark>");
+      }
+    }
+  }
+  function wikiSnippet(s){
+    try{
+      var doc = new DOMParser().parseFromString("<div>" + s + "</div>", "text/html");
+      var out = []; cleanNodes(doc.body.firstChild, out); return out.join("");
+    }catch(e){ return esc(s); }
+  }
+
+  // ---------- language selector + autocomplete ----------
+  LANGS.forEach(function(l){
+    var o = document.createElement("option");
+    o.value = l[0]; o.textContent = l[1];
+    if(l[0] === lang) o.selected = true;
+    langSel.appendChild(o);
+  });
+  langSel.addEventListener("change", function(){
+    lang = langSel.value; localStorage.setItem("dhoondh.lang", lang);
+    if(q) render();
+  });
+
+  var tmr;
+  input.addEventListener("input", function(){
+    clearTimeout(tmr);
+    var v = input.value.trim();
+    if(v.length < 2){ sugg.innerHTML = ""; return; }
+    tmr = setTimeout(function(){
+      fetch("https://" + lang + ".wikipedia.org/w/api.php?action=opensearch&search=" + enc(v) +
+            "&limit=8&format=json&origin=*")
+        .then(function(r){ return r.json(); })
+        .then(function(d){ sugg.innerHTML = (d[1]||[]).map(function(t){ return '<option value="'+esc(t)+'">'; }).join(""); })
+        .catch(function(){});
+    }, 220);
+  });
+
+  // ---------- tab bar ----------
+  function buildTabs(){
+    tabsEl.innerHTML = "";
+    TABS.forEach(function(t){
+      var b = document.createElement("button");
+      b.type = "button"; b.className = "tab" + (t[0] === tab ? " active" : "");
+      b.textContent = t[1];
+      b.addEventListener("click", function(){
+        tab = t[0];
+        var u = new URL(location.href); u.searchParams.set("tab", tab);
+        history.replaceState(null, "", u);
+        render();
+      });
+      tabsEl.appendChild(b);
+    });
+  }
+
+  // ---------- data sources ----------
+  function wikiSearch(query){
+    return fetch("https://" + lang + ".wikipedia.org/w/api.php?action=query&list=search&srsearch=" + enc(query) +
+      "&format=json&origin=*&srlimit=8")
+      .then(function(r){ return r.json(); })
+      .then(function(d){ return (d.query && d.query.search) ? d.query.search : []; });
+  }
+  function wikiSummary(title){
+    return fetch("https://" + lang + ".wikipedia.org/api/rest_v1/page/summary/" + enc(title))
+      .then(function(r){ return r.ok ? r.json() : null; }).catch(function(){ return null; });
+  }
+  function pageURL(title){
+    return "https://" + lang + ".wikipedia.org/wiki/" + enc(title.replace(/ /g,"_"));
+  }
+  function iaSearch(query, mediatype){
+    var q2 = query + (mediatype ? " AND mediatype:(" + mediatype + ")" : "");
+    var url = "https://archive.org/advancedsearch.php?q=" + enc(q2) +
+      "&fl[]=identifier&fl[]=title&fl[]=creator&fl[]=year&fl[]=mediatype" +
+      "&rows=12&page=1&sort[]=downloads desc&output=json";
+    return fetch(url).then(function(r){ return r.json(); })
+      .then(function(d){ return (d.response && d.response.docs) ? d.response.docs : []; })
+      .catch(function(){ return []; });
+  }
+  function commonsSearch(query){
+    var url = "https://commons.wikimedia.org/w/api.php?action=query&generator=search&gsrsearch=" + enc(query) +
+      "&gsrnamespace=6&gsrlimit=12&prop=imageinfo&iiprop=url&iiurlwidth=240&format=json&origin=*";
+    return fetch(url).then(function(r){ return r.json(); })
+      .then(function(d){
+        if(!d.query || !d.query.pages) return [];
+        return Object.keys(d.query.pages).map(function(k){ return d.query.pages[k]; })
+          .filter(function(p){ return p.imageinfo && p.imageinfo[0]; });
+      })
+      .catch(function(){ return []; });
+  }
+
+  // ---------- renderers ----------
+  function linkButtons(list){
+    var row = el("div","chips");
+    list.forEach(function(item){
+      var a = document.createElement("a");
+      a.className = "btn" + (item[2] ? " hl" : "");
+      a.href = item[1].indexOf("%s") !== -1 ? item[1].replace("%s", enc(q)) : item[1];
+      a.target = "_blank"; a.rel = "noopener";
+      a.textContent = item[0];
+      row.appendChild(a);
+    });
+    return row;
+  }
+  function iaList(docs){
+    var wrap = el("div","card");
+    docs.forEach(function(d){
+      var row = el("div","result");
+      var img = el("img","thumb");
+      img.src = "https://archive.org/services/img/" + enc(d.identifier);
+      img.alt = ""; img.loading = "lazy"; img.onerror = function(){ img.remove(); };
+      row.appendChild(img);
+      var body = el("div"); body.style.flex = "1";
+      var a = document.createElement("a");
+      a.href = "https://archive.org/details/" + enc(d.identifier);
+      a.target = "_blank"; a.rel = "noopener";
+      a.appendChild(el("h3", null, esc(d.title || d.identifier)));
+      body.appendChild(a);
+      var meta = [];
+      if(d.creator){ meta.push(esc(Array.isArray(d.creator) ? d.creator[0] : d.creator)); }
+      if(d.year){ meta.push(esc(d.year)); }
+      var line = meta.join(" · ");
+      if(d.mediatype){ line += (line ? " " : "") + '<span class="badge">' + esc(d.mediatype) + "</span>"; }
+      body.appendChild(el("p","src", line || "archive.org"));
+      row.appendChild(body);
+      wrap.appendChild(row);
+    });
+    return wrap;
+  }
+  function imageGrid(pages){
+    var grid = el("div","grid");
+    pages.forEach(function(p){
+      var info = p.imageinfo[0];
+      var a = document.createElement("a");
+      a.className = "tile";
+      a.href = info.descriptionurl || ("https://commons.wikimedia.org/wiki/" + enc(p.title));
+      a.target = "_blank"; a.rel = "noopener";
+      var img = el("img"); img.src = info.thumburl; img.alt = ""; img.loading = "lazy";
+      img.onerror = function(){ img.remove(); };
+      a.appendChild(img);
+      a.appendChild(el("span", null, esc(p.title.replace(/^File:/,""))));
+      grid.appendChild(a);
+    });
+    return grid;
+  }
+  function answerCard(sum, fallbackTitle){
+    var card = el("div","card answer");
+    var top = el("div","top");
+    if(sum && sum.thumbnail && sum.thumbnail.source){
+      var img = el("img"); img.src = sum.thumbnail.source; img.alt = ""; img.loading = "lazy";
+      img.onerror = function(){ img.remove(); }; top.appendChild(img);
+    }
+    var body = el("div"); body.style.flex = "1";
+    body.appendChild(el("h3", null, esc((sum && sum.title) || fallbackTitle)));
+    body.appendChild(el("p","extract", esc((sum && (sum.extract || sum.description)) || "")));
+    var a = el("a","more","Poora article Wikipedia par →");
+    a.href = pageURL((sum && sum.title) || fallbackTitle);
+    a.target = "_blank"; a.rel = "noopener";
+    body.appendChild(a);
+    top.appendChild(body); card.appendChild(top);
+    return card;
+  }
+  function resultRow(hit, sum){
+    var row = el("div","result");
+    if(sum && sum.thumbnail && sum.thumbnail.source){
+      var img = el("img","thumb"); img.src = sum.thumbnail.source; img.alt = ""; img.loading = "lazy";
+      img.onerror = function(){ img.remove(); }; row.appendChild(img);
+    }
+    var body = el("div"); body.style.flex = "1";
+    var link = document.createElement("a");
+    link.href = pageURL(hit.title); link.target = "_blank"; link.rel = "noopener";
+    link.appendChild(el("h3", null, esc(hit.title)));
+    body.appendChild(link);
+    body.appendChild(el("p", null, wikiSnippet(hit.snippet) + "…"));
+    body.appendChild(el("div","src", esc(lang) + ".wikipedia.org"));
+    row.appendChild(body);
+    return row;
+  }
+
+  // ---------- per-tab content ----------
+  async function tabAll(){
+    var hits = await wikiSearch(q).catch(function(){ return []; });
+    var frag = document.createDocumentFragment();
+    if(hits.length){
+      var top = hits.slice(0,7);
+      var sums = await Promise.all(top.map(function(h){ return wikiSummary(h.title); }));
+      var ansIdx = -1;
+      for(var i=0;i<sums.length;i++){ if(sums[i] && (sums[i].extract || sums[i].description)){ ansIdx = i; break; } }
+      if(ansIdx >= 0) frag.appendChild(answerCard(sums[ansIdx], top[ansIdx].title));
+      var wrap = el("div","card");
+      top.forEach(function(h,i){ if(i === ansIdx) return; wrap.appendChild(resultRow(h, sums[i])); });
+      if(wrap.childNodes.length){ frag.appendChild(label("Wikipedia")); frag.appendChild(wrap); }
+    } else {
+      frag.appendChild(el("div","card","Koi Wikipedia result nahi mila."));
+    }
+    frag.appendChild(label("Aur engines par search karo"));
+    frag.appendChild(linkButtons(LINKS.all));
+    return frag;
+  }
+
+  async function tabImages(){
+    var pages = await commonsSearch(q);
+    var frag = document.createDocumentFragment();
+    if(pages.length){ frag.appendChild(label("Wikimedia Commons")); frag.appendChild(imageGrid(pages)); }
+    else { frag.appendChild(el("p","note","Commons par koi image nahi mili — neeche try karo.")); }
+    frag.appendChild(label("Image engines"));
+    frag.appendChild(linkButtons(LINKS.images));
+    return frag;
+  }
+
+  async function tabIA(mediatype, linksKey, sourceLabel){
+    var docs = await iaSearch(q, mediatype);
+    var frag = document.createDocumentFragment();
+    if(docs.length){ frag.appendChild(label(sourceLabel)); frag.appendChild(iaList(docs)); }
+    else { frag.appendChild(el("p","note","Internet Archive par kuch nahi mila — neeche try karo.")); }
+    frag.appendChild(label("Aur sources"));
+    frag.appendChild(linkButtons(LINKS[linksKey]));
+    return frag;
+  }
+
+  function tabLinksOnly(linksKey, note){
+    var frag = document.createDocumentFragment();
+    frag.appendChild(el("p","note", note));
+    frag.appendChild(linkButtons(LINKS[linksKey]));
+    return frag;
+  }
+
+  async function tabAI(){
+    var frag = document.createDocumentFragment();
+    var card = el("div","card answer");
+    card.appendChild(el("h3", null, "Sarvam Indus AI"));
+    card.appendChild(el("p","extract","India ka apna AI assistant — Hindi, Tamil, Bengali aur baaki Indian languages me baat karo. Neeche se seedha kholo."));
+    var a = el("a","more","indus.sarvam.ai kholo →");
+    a.href = "https://indus.sarvam.ai/"; a.target = "_blank"; a.rel = "noopener";
+    card.appendChild(a);
+    frag.appendChild(card);
+    frag.appendChild(label("AI tools par poochho"));
+    frag.appendChild(linkButtons(LINKS.ai));
+    return frag;
+  }
+
+  // ---------- render ----------
+  async function render(){
+    results.innerHTML = "";
+    if(!q){ home.hidden = false; tabsEl.hidden = true; return; }
+    home.hidden = true; tabsEl.hidden = false;
+    input.value = q; document.title = q + " — Dhoondh";
+    buildTabs();
+
+    var loading = el("div","status","Dhoondh rahe hain: <b>" + esc(q) + "</b> …");
+    results.appendChild(loading);
+
+    var node;
+    try{
+      switch(tab){
+        case "ai":      node = await tabAI(); break;
+        case "images":  node = await tabImages(); break;
+        case "videos":  node = await tabIA("movies", "videos", "Internet Archive — videos"); break;
+        case "youtube": node = tabLinksOnly("youtube", "YouTube par seedha search karo:"); break;
+        case "papers":  node = await tabIA("texts", "papers", "Internet Archive — texts & papers"); break;
+        case "books":   node = await tabIA("texts", "books", "Internet Archive — books (EPUB/PDF)"); break;
+        case "pdf":     node = await tabIA("texts", "pdf", "Internet Archive — PDFs & texts"); break;
+        case "ppt":     node = tabLinksOnly("ppt", "Presentations (PPT/PPTX) Google/Bing par:"); break;
+        case "drive":   node = tabLinksOnly("drive", "Public Google Drive files/folders dhoondho:"); break;
+        case "terabox": node = tabLinksOnly("terabox", "Terabox links dhoondho:"); break;
+        case "archive": node = await tabIA("", "archive", "Internet Archive — sab kuch"); break;
+        default:        node = await tabAll();
+      }
+    }catch(e){
+      node = el("div","card","Kuchh load nahi hua — dobara try karo.");
+    }
+    results.innerHTML = "";
+    results.appendChild(node);
+  }
+
+  document.addEventListener("keydown", function(e){
+    if(e.key === "/" && document.activeElement !== input){ e.preventDefault(); input.focus(); }
+  });
+
+  render();
+})();
+</script>
+</body>
+</html>
