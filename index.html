@@ -611,6 +611,14 @@
     a.target = "_blank"; a.rel = "noopener";
     a.style.display = "inline-block"; a.style.marginTop = "12px";
     card.appendChild(a);
+    var b = el("button","btn", "Backend URL set / Test karo ↓");
+    b.type = "button";
+    b.style.marginTop = "12px"; b.style.marginLeft = "8px";
+    b.addEventListener("click", function(){
+      if(backendInput){ backendInput.focus(); backendInput.scrollIntoView({ behavior: "smooth", block: "center" }); }
+      if(backendMsg) backendMsg.textContent = "URL paste karke Save, phir Test dabao";
+    });
+    card.appendChild(b);
     return card;
   }
 
