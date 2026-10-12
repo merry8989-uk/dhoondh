@@ -1,9 +1,15 @@
 # Dhoondh search backend (Cloudflare Worker)
 
 **One file, no build step.** `worker.js` is self-contained — you paste it into the
-Cloudflare dashboard and deploy. It turns Dhoondh into a real search engine that
-shows web results in-page: the Worker fetches results server-side (a static page
-can't — CORS + bot-blocking) and returns clean JSON.
+Cloudflare dashboard and deploy.
+
+> **Easiest paste:** if the full file is awkward on a phone, use
+> [`minimal.js`](minimal.js) instead — a 2 KB Bing-only worker with the same deploy
+> steps. It returns real web results with no key and no card.
+
+`worker.js` turns Dhoondh into a real search engine that shows web results in-page:
+the Worker fetches results server-side (a static page can't — CORS + bot-blocking)
+and returns clean JSON.
 
 Upstreams, in order of preference:
 
