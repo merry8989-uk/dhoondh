@@ -38,16 +38,22 @@ engines (Google, Bing, YouTube, Google Scholar, etc.) ke links bhi diye jaate ha
 
 ---
 
-## Default search engine
+## Real web results (backend)
 
-By default Dhoondh aapki search **DuckDuckGo** par bhejta hai. Header me **"Search with"**
-selector hai — DuckDuckGo (default), Google, Brave, Bing, Yandex, Startpage chuno, aur har
-search wahin asli web results ke saath khulegi. **"Dhoondh (tabs)"** chuno to in-app tabs
-wala experience milega (Wikipedia + Internet Archive + Commons + saare tabs).
+Dhoondh web results **isi page par** dikhata hai. Uske liye ek chhota server-side proxy
+chahiye — `worker/` folder me ek free **Cloudflare Worker** hai — kyunki ek static page
+seedha Google/DuckDuckGo/Brave se results nahi laa sakta (CORS + bot-blocking).
 
-Kyun hand-off? DuckDuckGo/Google/Brave/Yandex koi public, CORS-friendly results API nahi
-dete, isliye ek static page unke results embed nahi kar sakta — khol deta hai. In-app tabs
-wo free sources use karte hain jo allow karte hain (Wikipedia, Internet Archive, Commons).
+- **Backend ke bina:** All tab me setup card + hand-off buttons (Google, DuckDuckGo, Bing,
+  Brave…) dikhte hain, aur Wikipedia / Internet Archive / Commons results page par hi aate hain.
+- **Backend ke saath:** All tab me asli web results (default DuckDuckGo) isi page par dikhte hain.
+
+Lagane ka tareeka (2 minute, one click):
+1. Kholo: https://deploy.workers.cloudflare.com/?url=https://github.com/merry8989-uk/dhoondh/tree/main/worker
+2. Cloudflare account banao → Deploy. URL milega: `https://dhoondh-search.<you>.workers.dev`
+3. Dhoondh site ke footer me **"Web results backend"** field me wo URL paste karke **Save** karo.
+
+Detail: `worker/README.md`. Worker Brave API key, SearXNG, ya DuckDuckGo HTML — teeno support karta hai.
 
 ## 1. App ki tarah install karo (PWA — sabse aasan)
 

@@ -53,6 +53,7 @@ Two ways to get an actual `.apk`:
 - `icon-192.png`, `icon-512.png`, `icon-maskable-512.png`, `apple-touch-icon.png` — app icons
 - `favicon.svg` — browser icon
 - `opensearch.xml` — lets the browser add it as a search engine
+- `worker/` — optional Cloudflare Worker that fetches real web results in-page
 - `android/` — Android WebView wrapper project (for building an APK)
 - `SETUP.md` — how to add it to Chrome/Firefox, and the APK steps
 
@@ -73,18 +74,21 @@ No server, no build step, no API key. Open `index.html` and it works.
 See `SETUP.md`. Quick version (Chrome/Edge): Settings → Search engines → Add →
 URL `https://merry8989-uk.github.io/dhoondh/?q=%s`, shortcut `dh`.
 
-## Default search engine
+## Real web results (optional backend)
 
-Dhoondh hands your search to **DuckDuckGo** by default. The header has a **"Search with"**
-selector — pick DuckDuckGo (default), Google, Brave, Bing, Yandex or Startpage, and every
-search opens there with real web results. Pick **"Dhoondh (tabs)"** to use the in-app
-multi-tab experience instead (Wikipedia + Internet Archive + Commons, plus the specialised
-tabs).
+Dhoondh shows web results **in the page**, like a normal search engine. For that it uses a
+tiny server-side proxy — a free Cloudflare Worker in [`worker/`](worker/) — because a
+static page can't fetch Google / DuckDuckGo / Brave directly (CORS + bot-blocking).
 
-Why hand off? DuckDuckGo, Google, Brave and Yandex publish no public, CORS-friendly
-results API, so a static page cannot embed their results — it opens them instead. The
-in-app tabs use the free sources that *do* allow it (Wikipedia, Internet Archive,
-Wikimedia Commons).
+- **Without the backend:** the All tab shows a setup card and one-click hand-off buttons
+  (Google, DuckDuckGo, Bing, Brave…), while Wikipedia / Internet Archive / Commons results
+  still render in-page.
+- **With the backend:** the All tab renders real web results (DuckDuckGo by default) right
+  in the page.
+
+Deploy it in ~2 minutes (one click) and paste the URL into the **"Web results backend"**
+field in the footer. Full steps: [`worker/README.md`](worker/README.md). The Worker can use
+the Brave Search API (key), a SearXNG instance, or DuckDuckGo HTML (no key).
 
 ## Contact / Feedback
 

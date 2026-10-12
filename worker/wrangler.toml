@@ -1,0 +1,12 @@
+name = "dhoondh-search"
+main = "worker.js"
+compatibility_date = "2024-10-01"
+
+# Optional settings — add them in the Cloudflare dashboard under
+# Settings → Variables and Secrets, or uncomment here.
+#
+# [vars]
+# SEARXNG_URL = "https://your-searxng-instance.example"
+#
+# BRAVE_API_KEY should be added as an encrypted *secret* (not a plain var):
+#   wrangler secret put BRAVE_API_KEY
