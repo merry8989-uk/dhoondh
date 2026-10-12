@@ -46,7 +46,7 @@ export default {
       let data;
       if (env && env.BRAVE_API_KEY) data = await brave(q, env.BRAVE_API_KEY);
       else if (env && env.SEARXNG_URL) data = await searxng(q, env.SEARXNG_URL);
-      else data = await ddg(q);
+      else data = await keyless(q);
       if (!debug && data.debug) delete data.debug;
       return json(data, 200);
     } catch (err) {
@@ -77,6 +77,7 @@ function stripTags(s) {
     .replace(/<[^>]*>/g, "")
     .replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">")
     .replace(/&quot;/g, '"').replace(/&#x27;/g, "'").replace(/&#39;/g, "'")
+    .replace(/&#(\d+);/g, function (m, n) { return String.fromCharCode(Number(n)); })
     .replace(/&nbsp;/g, " ")
     .replace(/\s+/g, " ").trim();
 }
@@ -138,9 +139,48 @@ function parseLite(html) {
   return out;
 }
 
+/* Bing markup — the real URL is base64url-encoded in the ?u=a1... redirect param */
+function decodeBingUrl(href) {
+  const h = String(href).replace(/&amp;/g, "&");
+  const m = h.match(/[?&]u=a1([^&]+)/);
+  if (m) {
+    let b = m[1].replace(/-/g, "+").replace(/_/g, "/");
+    while (b.length % 4) b += "=";
+    try { return atob(b); } catch (e) { /* fall through */ }
+  }
+  return h;
+}
+
+function parseBing(html) {
+  const out = [];
+  const reA = /<h2[^>]*>\s*<a[^>]*href="([^"]+)"[^>]*>([\s\S]*?)<\/a>/g;
+  const reS = /<p class="b_lineclamp[^"]*"[^>]*>([\s\S]*?)<\/p>/g;
+  const links = [...html.matchAll(reA)];
+  const snips = [...html.matchAll(reS)];
+  links.forEach((m, i) => {
+    const url = decodeBingUrl(m[1]);
+    const title = stripTags(m[2]);
+    const snippet = snips[i] ? stripTags(snips[i][1]) : "";
+    if (title && /^https?:/i.test(url)) out.push({ title, url, snippet });
+  });
+  return out;
+}
+
 /* ---------- DuckDuckGo (no key) ---------- */
 
-async function ddg(q) {
+async function keyless(q) {
+  const debug = [];
+
+  // 1. Bing — usually reachable from datacenter IPs, no key.
+  try {
+    const r = await bing(q);
+    debug.push("bing -> " + r.length);
+    if (r.length) return { source: "bing", results: r, debug };
+  } catch (e) {
+    debug.push("bing err " + (e && e.message));
+  }
+
+  // 2. DuckDuckGo html / lite.
   const enc = encodeURIComponent(q);
   const attempts = [
     ["html-post", "https://html.duckduckgo.com/html/",
@@ -150,7 +190,6 @@ async function ddg(q) {
     ["lite-post", "https://lite.duckduckgo.com/lite/",
       { method: "POST", headers: FORM_HEADERS, body: "q=" + enc }]
   ];
-  const debug = [];
   for (const [name, url, init] of attempts) {
     try {
       const res = await fetch(url, init);
@@ -175,7 +214,16 @@ async function ddg(q) {
   } catch (e) {
     debug.push("instant err " + (e && e.message));
   }
-  return { source: "duckduckgo", blocked: true, results: [], debug };
+  return { source: "none", blocked: true, results: [], debug };
+}
+
+async function bing(q) {
+  const res = await fetch(
+    "https://www.bing.com/search?q=" + encodeURIComponent(q) + "&count=20",
+    { headers: { "user-agent": UA, "accept-language": "en-US,en;q=0.9" } }
+  );
+  const html = await res.text();
+  return parseBing(html);
 }
 
 async function ddgInstant(q) {

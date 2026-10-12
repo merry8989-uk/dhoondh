@@ -9,9 +9,9 @@ Upstreams, in order of preference:
 
 | Set this | Uses | Notes |
 |----------|------|-------|
-| `BRAVE_API_KEY` | Brave Search API | Most reliable. Free tier (~2,000 queries/month). |
+| `BRAVE_API_KEY` | Brave Search API | Most reliable, but Brave now asks for a card on file. |
 | `SEARXNG_URL` | Your SearXNG instance | Self-hosted meta-search (aggregates Google, DDG, Brave…). |
-| *(nothing)* | DuckDuckGo | Zero setup, no key. DDG may show a bot-check from datacenter IPs. |
+| *(nothing)* | **Bing**, then DuckDuckGo | Zero setup, **no key, no card**. Bing usually works from datacenter IPs; DuckDuckGo often shows a bot-check. |
 
 ## Deploy — easiest: paste into the dashboard (~2 min)
 

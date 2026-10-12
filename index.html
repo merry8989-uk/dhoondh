@@ -600,7 +600,7 @@
     if(set && web && web.error){
       msg = "Backend se response nahi aaya: " + web.error + " — footer me URL check karo (https://…workers.dev) aur 'Test' dabao.";
     } else if(set && web && web.blocked){
-      msg = "Backend chal raha hai, par DuckDuckGo ne bot-check dikhaya (datacenter IP se aisa hota hai). Worker me BRAVE_API_KEY ya SEARXNG_URL set karo — worker/README.md dekho.";
+      msg = "Backend chal raha hai, par koi keyless source (Bing/DuckDuckGo) ne results nahi diye. Worker ka naya code deploy karo (ab Bing try karta hai), ya worker me SEARXNG_URL set karo — worker/README.md dekho.";
     } else if(set){
       msg = "Backend ne khaali results diye. 'Test' button se check karo, ya worker me Brave/SearXNG set karo.";
     } else {
