@@ -1,0 +1,5 @@
+# Root config so `npx wrangler deploy` works from the repository root too.
+# (There is also worker/wrangler.toml for deploying from inside worker/.)
+name = "dhoondh-search"
+main = "worker/worker.js"
+compatibility_date = "2024-10-01"

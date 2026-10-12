@@ -48,12 +48,26 @@ seedha Google/DuckDuckGo/Brave se results nahi laa sakta (CORS + bot-blocking).
   Brave…) dikhte hain, aur Wikipedia / Internet Archive / Commons results page par hi aate hain.
 - **Backend ke saath:** All tab me asli web results (default DuckDuckGo) isi page par dikhte hain.
 
-Lagane ka tareeka (2 minute, one click):
-1. Kholo: https://deploy.workers.cloudflare.com/?url=https://github.com/merry8989-uk/dhoondh/tree/main/worker
-2. Cloudflare account banao → Deploy. URL milega: `https://dhoondh-search.<you>.workers.dev`
-3. Dhoondh site ke footer me **"Web results backend"** field me wo URL paste karke **Save** karo.
+### Lagane ka tareeka (dashboard me paste — sabse aasan, ~2 min)
 
-Detail: `worker/README.md`. Worker Brave API key, SearXNG, ya DuckDuckGo HTML — teeno support karta hai.
+1. Cloudflare dashboard → **Workers & Pages** → **Create** → **Create Worker**.
+2. Naam: `dhoondh-search` → **Deploy**.
+3. **Edit code** → editor ka sab kuch delete karo → `worker/worker.js` ka poora code paste karo.
+4. **Deploy** dabao. URL milega: `https://dhoondh-search.<you>.workers.dev`
+5. Dhoondh site ke footer me **"Web results backend"** me wo URL paste → **Save** → **Test**.
+
+### Ya Deploy button se (Git-connected)
+
+[Deploy karo](https://deploy.workers.cloudflare.com/?url=https://github.com/merry8989-uk/dhoondh/tree/main/worker) →
+Project name `dhoondh-search`, Build command khaali, Deploy command `npx wrangler deploy`,
+aur **Advanced settings → Root directory = `worker`** (yeh zaroori hai) → Deploy.
+
+### Results nahi aa rahe?
+
+- Footer me **Test** button dabao — exact HTTP status/result count dikhega.
+- `BLOCKED` aata hai? DuckDuckGo ne bot-check diya (Cloudflare jaise datacenter IP se hota
+  hai) → Worker me **BRAVE_API_KEY** (free tier) ya **SEARXNG_URL** set karo.
+- `?debug=1` lagao: `https://<worker>/?q=ISRO&debug=1` — har attempt ka detail.
 
 ## 1. App ki tarah install karo (PWA — sabse aasan)
 

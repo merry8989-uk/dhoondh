@@ -181,6 +181,7 @@
     <span>Web results backend:</span>
     <input id="backend" type="url" placeholder="https://your-worker.workers.dev" spellcheck="false" autocomplete="off">
     <button id="saveBackend" type="button">Save</button>
+    <button id="testBackend" type="button">Test</button>
     <span id="backendMsg" class="msg"></span>
   </div>
   <div class="contact">Suggestion, feedback ya naya feature chahiye? Instagram par <a href="https://instagram.com/osintgram_io" target="_blank" rel="noopener">@osintgram_io</a> par message karo.</div>
@@ -210,21 +211,58 @@
   // ---- optional web-results backend (a free Cloudflare Worker) ----
   // A static page can't fetch Google/DDG/Brave directly (CORS + bot-blocking), so
   // real web results come from a tiny server-side proxy the user deploys. See worker/.
-  var backend = localStorage.getItem("dhoondh.backend") || "";
+  function normalizeBackend(v){
+    v = String(v == null ? "" : v).trim().replace(/\/+$/, "");
+    if(v && !/^https?:\/\//i.test(v)) v = "https://" + v;
+    return v;
+  }
+  function backendQuery(b, query){
+    return b + (b.indexOf("?") >= 0 ? "&" : "?") + "q=" + encodeURIComponent(query);
+  }
+  var backend = normalizeBackend(localStorage.getItem("dhoondh.backend") || "");
   var backendInput = document.getElementById("backend");
   var backendMsg = document.getElementById("backendMsg");
   if(backendInput) backendInput.value = backend;
   var saveBackendBtn = document.getElementById("saveBackend");
   if(saveBackendBtn) saveBackendBtn.addEventListener("click", function(){
-    backend = (backendInput.value || "").trim().replace(/\/+$/, "");
+    backend = normalizeBackend(backendInput.value);
     localStorage.setItem("dhoondh.backend", backend);
     if(backendMsg) backendMsg.textContent = backend ? "Saved" : "Cleared";
     if(q) render();
   });
+  var testBackendBtn = document.getElementById("testBackend");
+  if(testBackendBtn) testBackendBtn.addEventListener("click", function(){
+    var b = normalizeBackend(backendInput.value);
+    if(!b){ if(backendMsg) backendMsg.textContent = "Pehle URL daalo"; return; }
+    if(backendMsg) backendMsg.textContent = "Testing " + b + " …";
+    fetch(backendQuery(b, "ISRO")).then(function(r){
+      return r.text().then(function(t){
+        var j = null; try { j = JSON.parse(t); } catch(e){}
+        var s;
+        if(j && j.results){
+          s = "HTTP " + r.status + " · " + j.results.length + " results · source=" + (j.source || "?") + (j.blocked ? " · BLOCKED" : "");
+        } else {
+          s = "HTTP " + r.status + " · " + ((j && j.error) ? j.error : t.replace(/\s+/g, " ").slice(0, 90));
+        }
+        if(backendMsg) backendMsg.textContent = s;
+      });
+    }).catch(function(e){
+      if(backendMsg) backendMsg.textContent = "Fail: " + e.message;
+    });
+  });
   function webResults(){
     if(!backend) return Promise.resolve(null);
-    var u = backend + (backend.indexOf("?") >= 0 ? "&" : "?") + "q=" + enc(q);
-    return fetch(u).then(function(r){ return r.ok ? r.json() : null; }).catch(function(){ return null; });
+    var u = backendQuery(backend, q);
+    return fetch(u).then(function(r){
+      return r.text().then(function(t){
+        var j = null; try { j = JSON.parse(t); } catch(e){}
+        if(!j) return { results: [], error: "HTTP " + r.status + " — JSON nahi mila", url: u };
+        if(!r.ok) return { results: [], error: "HTTP " + r.status + (j.error ? " — " + j.error : ""), url: u };
+        return j;
+      });
+    }).catch(function(e){
+      return { results: [], error: "fetch fail (" + e.message + ")", url: u };
+    });
   }
 
   var TABS = [
@@ -555,12 +593,20 @@
 
   function webSetupCard(web){
     var card = el("div","card answer");
-    card.appendChild(el("h3", null, "Web results ke liye free backend lagao"));
-    var msg = (web && web.blocked)
-      ? "Backend ne DuckDuckGo se poocha, lekin DDG ne bot-check dikhaya. SearXNG URL ya Brave API key set karo (worker/README.md)."
-      : "Dhoondh ek static site hai, isliye browser seedha Google/DDG se results nahi laa sakta (CORS). Neeche diya free Cloudflare Worker 2 minute me lagao — phir poore web results isi page par dikhenge.";
+    var set = !!backend;
+    card.appendChild(el("h3", null, set ? "Web results nahi aaye" : "Web results ke liye free backend lagao"));
+    var msg;
+    if(set && web && web.error){
+      msg = "Backend se response nahi aaya: " + web.error + " — footer me URL check karo (https://…workers.dev) aur 'Test' dabao.";
+    } else if(set && web && web.blocked){
+      msg = "Backend chal raha hai, par DuckDuckGo ne bot-check dikhaya (datacenter IP se aisa hota hai). Worker me BRAVE_API_KEY ya SEARXNG_URL set karo — worker/README.md dekho.";
+    } else if(set){
+      msg = "Backend ne khaali results diye. 'Test' button se check karo, ya worker me Brave/SearXNG set karo.";
+    } else {
+      msg = "Dhoondh ek static site hai, isliye browser seedha Google/DDG se results nahi laa sakta (CORS). Neeche diya free Cloudflare Worker 2 minute me lagao — phir poore web results isi page par dikhenge.";
+    }
     card.appendChild(el("p","extract", msg));
-    var a = el("a","btn hl", "Backend setup guide →");
+    var a = el("a","btn hl", set ? "Worker settings →" : "Backend setup guide →");
     a.href = "https://github.com/merry8989-uk/dhoondh/tree/main/worker";
     a.target = "_blank"; a.rel = "noopener";
     a.style.display = "inline-block"; a.style.marginTop = "12px";

@@ -1,12 +1,9 @@
 # Dhoondh search backend (Cloudflare Worker)
 
-This tiny Worker is what turns Dhoondh from a "launcher" into a **real search
-engine that shows web results in-page**.
-
-A static web page can't fetch Google / DuckDuckGo / Brave directly — browsers
-block it (CORS) and the engines block bots. This Worker does the request
-server-side and returns clean JSON with CORS enabled. The Dhoondh page then
-renders the results itself.
+**One file, no build step.** `worker.js` is self-contained — you paste it into the
+Cloudflare dashboard and deploy. It turns Dhoondh into a real search engine that
+shows web results in-page: the Worker fetches results server-side (a static page
+can't — CORS + bot-blocking) and returns clean JSON.
 
 Upstreams, in order of preference:
 
@@ -14,51 +11,66 @@ Upstreams, in order of preference:
 |----------|------|-------|
 | `BRAVE_API_KEY` | Brave Search API | Most reliable. Free tier (~2,000 queries/month). |
 | `SEARXNG_URL` | Your SearXNG instance | Self-hosted meta-search (aggregates Google, DDG, Brave…). |
-| *(nothing)* | DuckDuckGo HTML | Zero setup, no key. DDG may occasionally show a bot-check. |
+| *(nothing)* | DuckDuckGo | Zero setup, no key. DDG may show a bot-check from datacenter IPs. |
 
-## Deploy — one click
+## Deploy — easiest: paste into the dashboard (~2 min)
 
-1. Click: **https://deploy.workers.cloudflare.com/?url=https://github.com/merry8989-uk/dhoondh/tree/main/worker**
-2. Sign in / create a free Cloudflare account.
-3. Deploy. You'll get a URL like `https://dhoondh-search.<you>.workers.dev`.
-4. Open the Dhoondh site, scroll to the footer, paste that URL into
-   **"Web results backend"** and hit **Save**.
-5. Search anything — real web results now appear in the page.
+1. Cloudflare dashboard → **Workers & Pages** → **Create** → **Create Worker**.
+2. Name it `dhoondh-search` → **Deploy**.
+3. Click **Edit code**. Select everything in the editor and delete it.
+4. Copy the **whole** `worker.js` file from this repo and paste it in.
+5. Click **Deploy** (top right).
+6. Copy your Worker URL — like `https://dhoondh-search.<your-subdomain>.workers.dev`.
+7. Open the Dhoondh site → scroll to the footer → **Web results backend** → paste the
+   URL → **Save** → **Test**.
 
-## Deploy — with Wrangler (command line)
+## Deploy — Git-connected (the "Set up your application" screen)
+
+If you came in through the Deploy button and see a form, fill it like this:
+
+- **Project name:** `dhoondh-search`
+- **Build command:** leave empty
+- **Deploy command:** `npx wrangler deploy`
+- **Advanced settings → Root directory:** `worker`   ← **important**, the config lives there
+
+Then **Deploy**.
+
+## Deploy — Wrangler CLI
 
 ```bash
 npm install -g wrangler
 wrangler login
-cd worker
+cd worker          # or run from the repo root (a root wrangler.toml is included)
 wrangler deploy
 ```
 
-## Optional: better results
+## Optional: better, more reliable results
 
-- **Brave API key** (recommended): get one at
-  <https://brave.com/search/api/> then
-  `wrangler secret put BRAVE_API_KEY` (or add it in the dashboard).
-- **SearXNG**: self-host (or use an instance that allows the JSON API) and set
-  `SEARXNG_URL`.
+- **Brave API key (recommended):** get one at <https://brave.com/search/api/>, then add
+  `BRAVE_API_KEY` as a **secret** in the Worker's *Settings → Variables and Secrets*.
+- **SearXNG:** set `SEARXNG_URL` instead.
 
 ## Test it
 
-```
-https://dhoondh-search.<you>.workers.dev/?q=ISRO
-```
-
-You should get JSON like:
+Open `https://<your-worker>/?q=ISRO`. You should get JSON:
 
 ```json
 { "source": "duckduckgo", "results": [ { "title": "…", "url": "…", "snippet": "…" } ] }
 ```
 
-If `"blocked": true` comes back, DuckDuckGo showed a bot-check — set
-`BRAVE_API_KEY` or `SEARXNG_URL`.
+## Troubleshooting
+
+- **`"blocked": true`** — DuckDuckGo showed its bot-check. This is common from datacenter
+  IPs, **including Cloudflare's**. Fix: set `BRAVE_API_KEY` or `SEARXNG_URL`.
+- **See exactly what happened:** `https://<your-worker>/?q=ISRO&debug=1` — the JSON then
+  includes a `debug` array with every upstream attempt and why it failed.
+- **In the app:** the footer's **Test** button shows the HTTP status, result count and
+  source for your backend URL — use it first when something's off.
+- **Worker URL works but the app says "JSON nahi mila"** — the Worker is probably still the
+  default "Hello World" template. Paste `worker.js` and redeploy.
 
 ## Note on terms
 
-Scraping DuckDuckGo's HTML is fine for light personal use but is a grey area and
-can be rate-limited. For anything serious, use the Brave API or a self-hosted
-SearXNG. Dhoondh only ever calls *your* Worker.
+Scraping DuckDuckGo's HTML is fine for light personal use but is a grey area and can be
+rate-limited. For anything serious, use the Brave API or a self-hosted SearXNG. Dhoondh
+only ever calls *your* Worker.
