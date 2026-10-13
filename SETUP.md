@@ -22,13 +22,15 @@ engines (Google, Bing, YouTube, Google Scholar, etc.) ke links bhi diye jaate ha
 
 ## Tabs
 
-**All · AI · Images · Videos · YouTube · Papers · Books/EPUB · PDF · PPT · Drive · Terabox · Archive**
+**All · AI · Images · Videos · YouTube · Papers · Data · OSINT · Books/EPUB · PDF · PPT · Drive · Terabox · Archive**
 
 - **All** — Wikipedia answer + articles + 8 general engines
 - **AI** — Sarvam **Indus AI** (highlighted) + ChatGPT, Perplexity, Gemini, Claude, Copilot, Grok, DeepSeek, You.com
 - **Images** — Wikimedia Commons image grid + Google/Bing Images, Unsplash, Pexels, Openverse
 - **Videos** — Internet Archive videos + YouTube, Vimeo, Dailymotion
-- **Papers** — Internet Archive texts + Google Scholar, arXiv, Semantic Scholar, OpenAlex, CORE, PubMed
+- **Papers** — live results from Crossref, OpenAlex, arXiv + Google Scholar, Semantic Scholar, PubMed, CORE
+- **Data** — live results from Zenodo, GDELT, Wikidata + Google Dataset Search, data.gov.in, data.gov, World Bank, UN Data
+- **OSINT** — live results from GDELT, Wikidata, GLEIF, Wayback + crt.sh, urlscan.io, Shodan, OpenCorporates, OpenSanctions
 - **Books/EPUB** — Internet Archive books + Project Gutenberg, Open Library, Standard Ebooks
 - **PDF** — Internet Archive PDFs + `filetype:pdf` searches
 - **PPT** — `filetype:ppt/pptx` + SlideShare

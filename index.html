@@ -312,9 +312,79 @@
     return null;
   }
 
+  // ---- generic fetch that works with or without CORS (direct, then proxies) ----
+  function proxyList(url){
+    return [
+      "https://api.allorigins.win/raw?url=" + encodeURIComponent(url),
+      "https://corsproxy.io/?url=" + encodeURIComponent(url),
+      "https://api.codetabs.com/v1/proxy?quest=" + encodeURIComponent(url)
+    ];
+  }
+  async function fetchAny(url){
+    try { var r = await fetch(url); if(r.ok) return await r.json(); } catch(e){}
+    var ps = proxyList(url);
+    for(var i=0;i<ps.length;i++){ try { var r2 = await fetch(ps[i]); if(r2.ok) return await r2.json(); } catch(e){} }
+    return null;
+  }
+  async function fetchAnyText(url){
+    try { var r = await fetch(url); if(r.ok) return await r.text(); } catch(e){}
+    var ps = proxyList(url);
+    for(var i=0;i<ps.length;i++){ try { var r2 = await fetch(ps[i]); if(r2.ok) return await r2.text(); } catch(e){} }
+    return null;
+  }
+
+  // ---- open connectors: research / open data / OSINT ----
+  function crossref(q){ return fetchAny("https://api.crossref.org/works?rows=6&query=" + enc(q)).then(function(d){ return (d && d.message && d.message.items) || []; }); }
+  function openalex(q){ return fetchAny("https://api.openalex.org/works?per-page=6&search=" + enc(q)).then(function(d){ return (d && d.results) || []; }); }
+  function arxiv(q){ return fetchAnyText("https://export.arxiv.org/api/query?search_query=all:" + enc(q) + "&max_results=6").then(function(x){ return parseArxiv(x || ""); }); }
+  function zenodo(q){ return fetchAny("https://zenodo.org/api/records?size=6&q=" + enc(q)).then(function(d){ return (d && d.hits && d.hits.hits) || []; }); }
+  function gdelt(q){ return fetchAny("https://api.gdeltproject.org/api/v2/doc/doc?mode=artlist&maxrecords=8&format=json&query=" + enc(q)).then(function(d){ return (d && d.articles) || []; }); }
+  function wikidata(q){ return fetchAny("https://www.wikidata.org/w/api.php?action=wbsearchentities&language=en&format=json&limit=8&search=" + enc(q)).then(function(d){ return (d && d.search) || []; }); }
+  function gleif(q){ return fetchAny("https://api.gleif.org/api/v1/lei-records?page%5Bsize%5D=6&filter%5Bfulltext%5D=" + enc(q)).then(function(d){ return (d && d.data) || []; }); }
+  function wayback(q){
+    var d0 = q.replace(/^https?:\/\//i, "").replace(/\/.*$/, "");
+    if(!/^[a-z0-9.-]+\.[a-z]{2,}$/i.test(d0)) return Promise.resolve([]);
+    return fetchAny("http://web.archive.org/cdx/search/cdx?output=json&limit=6&url=" + enc(d0)).then(function(d){ return (d || []).slice(1); });
+  }
+  function parseArxiv(xml){
+    var out = [], re = /<entry>([\s\S]*?)<\/entry>/g, m;
+    while((m = re.exec(xml))){
+      var e = m[1];
+      var t = (e.match(/<title>([\s\S]*?)<\/title>/) || [])[1] || "";
+      var id = (e.match(/<id>([\s\S]*?)<\/id>/) || [])[1] || "";
+      var s = (e.match(/<summary>([\s\S]*?)<\/summary>/) || [])[1] || "";
+      if(t) out.push({ title: stripTags(t), url: id.trim(), snippet: stripTags(s).slice(0, 220) });
+    }
+    return out;
+  }
+  function sectionList(title, items, mapFn){
+    var frag = document.createDocumentFragment();
+    if(!items || !items.length) return frag;
+    var wrap = el("div","card");
+    items.forEach(function(it){
+      var o = mapFn(it);
+      if(!o || !o.title) return;
+      var row = el("div","result");
+      var body = el("div"); body.style.flex = "1";
+      var a = document.createElement("a");
+      a.href = o.url || "#"; a.target = "_blank"; a.rel = "noopener";
+      a.appendChild(el("h3", null, esc(o.title)));
+      body.appendChild(a);
+      if(o.snippet) body.appendChild(el("p", null, esc(o.snippet)));
+      if(o.meta) body.appendChild(el("div","src", esc(o.meta)));
+      row.appendChild(body);
+      wrap.appendChild(row);
+    });
+    if(!wrap.childNodes.length) return frag;
+    frag.appendChild(label(title));
+    frag.appendChild(wrap);
+    return frag;
+  }
+
   var TABS = [
     ["all","All"], ["ai","AI"], ["images","Images"], ["videos","Videos"],
-    ["youtube","YouTube"], ["papers","Papers"], ["books","Books / EPUB"],
+    ["youtube","YouTube"], ["papers","Papers"], ["data","Data"], ["osint","OSINT"],
+    ["books","Books / EPUB"],
     ["pdf","PDF"], ["ppt","PPT"], ["drive","Drive"], ["terabox","Terabox"],
     ["archive","Archive"]
   ];
@@ -413,11 +483,31 @@
       ["Movies","https://archive.org/search?query=%s&and[]=mediatype%3A%22movies%22"],
       ["Audio","https://archive.org/search?query=%s&and[]=mediatype%3A%22audio%22"],
       ["Wayback Machine","https://web.archive.org/web/*/%s"]
+    ],
+    data: [
+      ["Google Dataset Search","https://datasetsearch.research.google.com/search?query=%s"],
+      ["data.gov.in","https://www.google.com/search?q=%s+site%3Adata.gov.in"],
+      ["data.gov (US)","https://catalog.data.gov/dataset?q=%s"],
+      ["Zenodo","https://zenodo.org/search?q=%s"],
+      ["Wikidata","https://www.wikidata.org/w/index.php?search=%s"],
+      ["World Bank","https://data.worldbank.org/"],
+      ["UN Data","https://data.un.org/Search.aspx?q=%s"],
+      ["OpenStreetMap","https://www.openstreetmap.org/search?query=%s"]
+    ],
+    osint: [
+      ["crt.sh (certificates)","https://crt.sh/?q=%s"],
+      ["urlscan.io","https://urlscan.io/search/#%s"],
+      ["Shodan","https://www.shodan.io/search?query=%s"],
+      ["OpenCorporates","https://opencorporates.com/companies?q=%s"],
+      ["OpenSanctions","https://www.opensanctions.org/search/?q=%s"],
+      ["Wayback","https://web.archive.org/web/*/%s"],
+      ["GitHub","https://github.com/search?q=%s"],
+      ["Google (dorks)","https://www.google.com/search?q=%s"]
     ]
   };
 
   // tabs that fetch real in-page results
-  var FETCHERS = { all:1, images:1, videos:1, papers:1, books:1, pdf:1, archive:1 };
+  var FETCHERS = { all:1, images:1, videos:1, papers:1, books:1, pdf:1, archive:1, data:1, osint:1 };
 
   function esc(s){
     return String(s == null ? "" : s).replace(/&/g,"&amp;").replace(/</g,"&lt;")
@@ -669,6 +759,82 @@
     return card;
   }
 
+  async function tabPapers(){
+    var frag = document.createDocumentFragment();
+    frag.appendChild(el("p","note","Live results: Crossref · OpenAlex · arXiv"));
+    var out = await Promise.all([
+      crossref(q).catch(function(){ return []; }),
+      openalex(q).catch(function(){ return []; }),
+      arxiv(q).catch(function(){ return []; })
+    ]);
+    frag.appendChild(sectionList("Crossref (journals)", out[0], function(it){
+      var yr = it.issued && it.issued["date-parts"] && it.issued["date-parts"][0] && it.issued["date-parts"][0][0];
+      var a1 = it.author && it.author[0] ? ((it.author[0].given || "") + " " + (it.author[0].family || "")).trim() : "";
+      return { title: (it.title || [])[0], url: it.URL || (it.DOI ? "https://doi.org/" + it.DOI : ""), meta: [a1, yr].filter(Boolean).join(" · ") };
+    }));
+    frag.appendChild(sectionList("OpenAlex (open access)", out[1], function(it){
+      var a1 = it.authorships && it.authorships[0] ? it.authorships[0].author.display_name : "";
+      return { title: it.display_name, url: (it.primary_location && it.primary_location.landing_page_url) || it.doi || it.id, meta: [a1, it.publication_year].filter(Boolean).join(" · ") };
+    }));
+    frag.appendChild(sectionList("arXiv (preprints)", out[2], function(it){
+      return { title: it.title, url: it.url, snippet: it.snippet };
+    }));
+    frag.appendChild(label("Aur research sources"));
+    frag.appendChild(linkButtons(LINKS.papers));
+    return frag;
+  }
+
+  async function tabData(){
+    var frag = document.createDocumentFragment();
+    frag.appendChild(el("p","note","Live results: Zenodo · GDELT · Wikidata"));
+    var out = await Promise.all([
+      zenodo(q).catch(function(){ return []; }),
+      gdelt(q).catch(function(){ return []; }),
+      wikidata(q).catch(function(){ return []; })
+    ]);
+    frag.appendChild(sectionList("Zenodo (open research data)", out[0], function(it){
+      return { title: it.metadata && it.metadata.title, url: (it.links && (it.links.self_html || it.links.self)) || "", meta: "Zenodo" + (it.metadata && it.metadata.resource_type ? " · " + it.metadata.resource_type.title : "") };
+    }));
+    frag.appendChild(sectionList("GDELT (news & events)", out[1], function(it){
+      return { title: it.title, url: it.url, meta: [it.domain, it.seendate ? String(it.seendate).slice(0, 8) : ""].filter(Boolean).join(" · ") };
+    }));
+    frag.appendChild(sectionList("Wikidata (structured open data)", out[2], function(it){
+      return { title: it.label, url: it.concepturi, snippet: it.description };
+    }));
+    frag.appendChild(label("Open data portals"));
+    frag.appendChild(linkButtons(LINKS.data));
+    return frag;
+  }
+
+  async function tabOSINT(){
+    var frag = document.createDocumentFragment();
+    frag.appendChild(el("p","note","Live results: GDELT · Wikidata · GLEIF · Wayback"));
+    var out = await Promise.all([
+      gdelt(q).catch(function(){ return []; }),
+      wikidata(q).catch(function(){ return []; }),
+      gleif(q).catch(function(){ return []; }),
+      wayback(q).catch(function(){ return []; })
+    ]);
+    frag.appendChild(sectionList("GDELT (news mentions)", out[0], function(it){
+      return { title: it.title, url: it.url, meta: [it.domain, it.language].filter(Boolean).join(" · ") };
+    }));
+    frag.appendChild(sectionList("Wikidata (entities)", out[1], function(it){
+      return { title: it.label, url: it.concepturi, snippet: it.description };
+    }));
+    frag.appendChild(sectionList("GLEIF (legal entities)", out[2], function(it){
+      var e = (it.attributes && it.attributes.entity) || {};
+      var name = e.legalName && e.legalName.name;
+      var ctry = e.legalAddress && e.legalAddress.country;
+      return { title: name, url: "https://search.gleif.org/#/record/" + it.id, meta: ["LEI " + it.id, ctry].filter(Boolean).join(" · ") };
+    }));
+    frag.appendChild(sectionList("Wayback Machine (archived captures)", out[3], function(it){
+      return { title: (it[2] || "") + " — " + (it[1] || ""), url: "https://web.archive.org/web/" + it[1] + "/" + it[2], meta: it[4] || "" };
+    }));
+    frag.appendChild(label("OSINT tools"));
+    frag.appendChild(linkButtons(LINKS.osint));
+    return frag;
+  }
+
   async function tabAll(){
     var frag = document.createDocumentFragment();
     frag.appendChild(label("Web results"));
@@ -757,7 +923,9 @@
         case "images":  node = await tabImages(); break;
         case "videos":  node = await tabIA("movies", "videos", "Internet Archive — videos"); break;
         case "youtube": node = tabLinksOnly("youtube", "YouTube par seedha search karo:"); break;
-        case "papers":  node = await tabIA("texts", "papers", "Internet Archive — texts & papers"); break;
+        case "papers":  node = await tabPapers(); break;
+        case "data":    node = await tabData(); break;
+        case "osint":   node = await tabOSINT(); break;
         case "books":   node = await tabIA("texts", "books", "Internet Archive — books (EPUB/PDF)"); break;
         case "pdf":     node = await tabIA("texts", "pdf", "Internet Archive — PDFs & texts"); break;
         case "ppt":     node = tabLinksOnly("ppt", "Presentations (PPT/PPTX) Google/Bing par:"); break;

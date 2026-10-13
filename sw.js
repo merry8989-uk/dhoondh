@@ -1,6 +1,6 @@
 /* Dhoondh service worker — makes the app installable and usable offline.
    Static assets are cached; cross-origin API calls always go to the network. */
-const CACHE = "dhoondh-v8";
+const CACHE = "dhoondh-v9";
 const ASSETS = [
   "./",
   "./index.html",
