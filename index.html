@@ -191,7 +191,7 @@
 (function(){
   "use strict";
   var params = new URLSearchParams(location.search);
-  var q = (params.get("q") || "").trim();
+  var q = (params.get("q") || "").replace(/\s+/g, " ").trim();
   var tab = params.get("tab") || "all";
   var input = document.getElementById("q");
   var home = document.getElementById("home");
@@ -293,23 +293,92 @@
     });
     return out;
   }
-  async function proxySearch(query){
-    var bing = "https://www.bing.com/search?q=" + encodeURIComponent(query) + "&count=20";
-    var urls = [
-      "https://api.allorigins.win/raw?url=" + encodeURIComponent(bing),
-      "https://corsproxy.io/?url=" + encodeURIComponent(bing),
-      "https://api.codetabs.com/v1/proxy?quest=" + encodeURIComponent(bing)
-    ];
-    for(var i=0;i<urls.length;i++){
-      try{
-        var r = await fetch(urls[i]);
-        if(!r.ok) continue;
-        var html = await r.text();
-        var res = parseBing(html);
-        if(res.length) return { source: "bing (proxy)", results: res };
-      }catch(e){}
+  function hostOf(u){ try { return new URL(u).hostname.replace(/^www\./i, "").toLowerCase(); } catch(e){ return ""; } }
+  function isJunk(u){
+    if(!/^https?:/i.test(u)) return true;
+    var h = hostOf(u);
+    if(!h) return true;
+    if(/^(bing|duckduckgo|google|yandex|yahoo|microsoft)\.(com|co\.[a-z]{2})$/i.test(h)) return true;
+    if(/aclick|bing\.com\/ck|duckduckgo\.com\/l\/|google\.com\/url/i.test(u)) return true;
+    return false;
+  }
+  function dedupe(list){
+    var seen = {}, out = [];
+    (list || []).forEach(function(r){
+      if(!r || !r.url || !r.title || isJunk(r.url)) return;
+      var k = String(r.url).replace(/^https?:\/\//i, "").replace(/^www\./i, "").replace(/[#?].*$/, "").replace(/\/$/, "").toLowerCase();
+      if(!k || seen[k]) return;
+      seen[k] = 1; out.push(r);
+    });
+    return out;
+  }
+  function anchorsByClass(html, cls){
+    var out = [], re = /<a\b([^>]*)>([\s\S]*?)<\/a>/g, m;
+    while((m = re.exec(html))){
+      if(new RegExp('class=["\'][^"\']*' + cls).test(m[1])){
+        var h = m[1].match(/href="([^"]+)"/);
+        if(h) out.push({ href: h[1], text: m[2] });
+      }
     }
-    return null;
+    return out;
+  }
+  function cellsByClass(html, cls){
+    var out = [], re = /<td\b([^>]*)>([\s\S]*?)<\/td>/g, m;
+    while((m = re.exec(html))){
+      if(new RegExp('class=["\'][^"\']*' + cls).test(m[1])) out.push(m[2]);
+    }
+    return out;
+  }
+  function ddgUrl(href){
+    var h = String(href).replace(/&amp;/g, "&");
+    var m = h.match(/[?&]uddg=([^&]+)/);
+    if(m){ try { h = decodeURIComponent(m[1]); } catch(e){} }
+    if(h.indexOf("//") === 0) h = "https:" + h;
+    return h;
+  }
+  function parseDDG(html){
+    var out = [], links = anchorsByClass(html, "result__a"), snips = anchorsByClass(html, "result__snippet");
+    links.forEach(function(l, i){
+      var u = ddgUrl(l.href), t = stripTags(l.text);
+      if(t && /^https?:/i.test(u)) out.push({ title: t, url: u, snippet: snips[i] ? stripTags(snips[i].text) : "" });
+    });
+    return out;
+  }
+  function parseLite(html){
+    var out = [], links = anchorsByClass(html, "result-link"), snips = cellsByClass(html, "result-snippet");
+    links.forEach(function(l, i){
+      var u = ddgUrl(l.href), t = stripTags(l.text);
+      if(t && /^https?:/i.test(u)) out.push({ title: t, url: u, snippet: snips[i] ? stripTags(snips[i]) : "" });
+    });
+    return out;
+  }
+  // Multi-source web search through public CORS proxies, merged + de-duplicated.
+  async function proxySearch(query){
+    var qs = encodeURIComponent(query);
+    var targets = [
+      ["bing", "https://www.bing.com/search?q=" + qs + "&count=20", "bing"],
+      ["duckduckgo", "https://html.duckduckgo.com/html/?q=" + qs, "ddg"],
+      ["duckduckgo", "https://lite.duckduckgo.com/lite/?q=" + qs, "lite"]
+    ];
+    var merged = [];
+    for(var t = 0; t < targets.length; t++){
+      var target = targets[t][1], kind = targets[t][2];
+      var urls = proxyList(target);
+      for(var i = 0; i < urls.length; i++){
+        try{
+          var r = await fetch(urls[i]);
+          if(!r.ok) continue;
+          var html = await r.text();
+          var res = kind === "ddg" ? parseDDG(html) : kind === "lite" ? parseLite(html) : parseBing(html);
+          res = dedupe(res);
+          if(res.length){ merged = merged.concat(res); break; }
+        }catch(e){}
+      }
+      if(merged.length >= 8) break;
+    }
+    merged = dedupe(merged).slice(0, 20);
+    if(!merged.length) return null;
+    return { source: "web", results: merged };
   }
 
   // ---- generic fetch that works with or without CORS (direct, then proxies) ----
@@ -507,7 +576,6 @@
   };
 
   // tabs that fetch real in-page results
-  var FETCHERS = { all:1, images:1, videos:1, papers:1, books:1, pdf:1, archive:1, data:1, osint:1 };
 
   function esc(s){
     return String(s == null ? "" : s).replace(/&/g,"&amp;").replace(/</g,"&lt;")
@@ -562,7 +630,14 @@
       fetch("https://" + lang + ".wikipedia.org/w/api.php?action=opensearch&search=" + enc(v) +
             "&limit=8&format=json&origin=*")
         .then(function(r){ return r.json(); })
-        .then(function(d){ sugg.innerHTML = (d[1]||[]).map(function(t){ return '<option value="'+esc(t)+'">'; }).join(""); })
+        .then(function(d){
+          var vv = input.value.trim().toLowerCase();
+          var hist = []; try { hist = JSON.parse(localStorage.getItem("dhoondh.hist") || "[]"); } catch(e){}
+          var opts = hist.filter(function(t){ return String(t).toLowerCase().indexOf(vv) >= 0; })
+                         .map(function(t){ return '<option value="'+esc(t)+'">'; });
+          (d[1]||[]).forEach(function(t){ opts.push('<option value="'+esc(t)+'">'); });
+          sugg.innerHTML = opts.join("");
+        })
         .catch(function(){});
     }, 220);
   });
@@ -742,7 +817,7 @@
     } else {
       msg = "Dhoondh ek static site hai, isliye browser seedha Google/DDG se results nahi laa sakta (CORS). Neeche diya free Cloudflare Worker 2 minute me lagao — phir poore web results isi page par dikhenge.";
     }
-    card.appendChild(el("p","extract", msg));
+    var pmsg = el("p","extract"); pmsg.textContent = msg; card.appendChild(pmsg);
     var a = el("a","btn hl", set ? "Worker settings →" : "Backend setup guide →");
     a.href = "https://github.com/merry8989-uk/dhoondh/tree/main/worker";
     a.target = "_blank"; a.rel = "noopener";
@@ -837,22 +912,21 @@
 
   async function tabAll(){
     var frag = document.createDocumentFragment();
-    frag.appendChild(label("Web results"));
     var web = await webResults();
     if(!(web && web.results && web.results.length)){
       var prox = await proxySearch(q);
       if(prox) web = prox;
     }
-    if(web && web.results && web.results.length){
+    var hasWeb = !!(web && web.results && web.results.length);
+    frag.appendChild(label(hasWeb ? ("Web results · " + web.results.length) : "Web results"));
+    if(hasWeb){
       if(web.results.length >= 3){
         var sc = el("div","card answer");
         sc.appendChild(el("h3", null, "AI summary"));
         var sbody = el("p","extract","Soch raha hoon…");
         sc.appendChild(sbody);
         frag.appendChild(sc);
-        var ctx = web.results.slice(0, 6).map(function(r, i){ return (i + 1) + ". " + r.title + " — " + (r.snippet || ""); }).join("\n");
-        askAI("Search query: \"" + q + "\"\nTop web results:\n" + ctx + "\n\nWrite a short 3-4 sentence summary that answers the query, in the same language as the query. Be factual and concise.", aiModel)
-          .then(function(t){ sbody.textContent = t || "AI summary abhi nahi mila."; });
+        aiSummary(q, web.results).then(function(t){ sbody.textContent = t || "AI summary abhi nahi mila."; });
       }
       frag.appendChild(webList(web.results));
     } else {
@@ -905,6 +979,14 @@
   var AI_MODELS = [["openai","Smart"],["openai-fast","Fast"],["mistral","Mistral"]];
   var aiModel = localStorage.getItem("dhoondh.model") || "openai";
   if(!AI_MODELS.some(function(m){ return m[0] === aiModel; })) aiModel = "openai";
+  var aiCache = {};
+  function aiSummary(query, results){
+    var key = aiModel + "|" + query;
+    if(aiCache[key]) return Promise.resolve(aiCache[key]);
+    var ctx = results.slice(0, 6).map(function(r, i){ return (i + 1) + ". " + r.title + " — " + String(r.snippet || "").slice(0, 160); }).join("\n");
+    var prompt = "Search query: \"" + query + "\"\nTop web results:\n" + ctx + "\n\nWrite a short 3-4 sentence summary that answers the query, in the same language as the query. Be factual and concise.";
+    return askAI(prompt, aiModel).then(function(t){ if(t) aiCache[key] = t; return t; });
+  }
   async function askAI(prompt, model){
     try {
       var r = await fetch("https://text.pollinations.ai/openai", {
@@ -989,11 +1071,37 @@
   }
 
   // ---------- render ----------
+  function addHistory(query){
+    try{
+      var h = JSON.parse(localStorage.getItem("dhoondh.hist") || "[]");
+      h = h.filter(function(x){ return String(x).toLowerCase() !== query.toLowerCase(); });
+      h.unshift(query);
+      localStorage.setItem("dhoondh.hist", JSON.stringify(h.slice(0, 10)));
+    }catch(e){}
+  }
+  function renderHome(){
+    var h = [];
+    try { h = JSON.parse(localStorage.getItem("dhoondh.hist") || "[]"); } catch(e){}
+    if(!h.length) return;
+    results.appendChild(label("Recent searches"));
+    var row = el("div","chips");
+    h.forEach(function(t){
+      var a = document.createElement("a");
+      a.className = "btn"; a.href = "?q=" + encodeURIComponent(t);
+      a.textContent = t;
+      row.appendChild(a);
+    });
+    results.appendChild(row);
+  }
   async function render(){
     results.innerHTML = "";
-    if(!q){ home.hidden = false; tabsEl.hidden = true; return; }
+    if(!q){
+      home.hidden = false; tabsEl.hidden = true;
+      renderHome(); return;
+    }
     home.hidden = true; tabsEl.hidden = false;
     input.value = q; document.title = q + " — Dhoondh";
+    addHistory(q);
     buildTabs();
 
     var loading = el("div","status","Dhoondh rahe hain: <b>" + esc(q) + "</b> …");
