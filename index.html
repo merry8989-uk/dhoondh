@@ -266,6 +266,52 @@
     });
   }
 
+  // ---- zero-setup fallback: fetch Bing through a public CORS proxy ----
+  function stripTags(s){
+    return String(s == null ? "" : s).replace(/<[^>]*>/g, "")
+      .replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"')
+      .replace(/&#(\d+);/g, function(m, n){ return String.fromCharCode(+n); })
+      .replace(/&nbsp;/g, " ").replace(/\s+/g, " ").trim();
+  }
+  function realUrl(href){
+    var h = String(href).replace(/&amp;/g, "&");
+    var m = h.match(/[?&]u=a1([^&]+)/);
+    if(m){ var b = m[1].replace(/-/g, "+").replace(/_/g, "/"); while(b.length % 4) b += "=";
+      try { return atob(b); } catch(e){} }
+    return h;
+  }
+  function parseBing(html){
+    var out = [];
+    var reA = /<h2[^>]*>\s*<a[^>]*href="([^"]+)"[^>]*>([\s\S]*?)<\/a>/g;
+    var reS = /<p class="b_lineclamp[^"]*"[^>]*>([\s\S]*?)<\/p>/g;
+    var L = [], S = [], m;
+    while((m = reA.exec(html))) L.push(m);
+    while((m = reS.exec(html))) S.push(m);
+    L.forEach(function(mm, i){
+      var u = realUrl(mm[1]); var t = stripTags(mm[2]);
+      if(t && /^https?:/i.test(u)) out.push({ title: t, url: u, snippet: S[i] ? stripTags(S[i][1]) : "" });
+    });
+    return out;
+  }
+  async function proxySearch(query){
+    var bing = "https://www.bing.com/search?q=" + encodeURIComponent(query) + "&count=20";
+    var urls = [
+      "https://api.allorigins.win/raw?url=" + encodeURIComponent(bing),
+      "https://corsproxy.io/?url=" + encodeURIComponent(bing),
+      "https://api.codetabs.com/v1/proxy?quest=" + encodeURIComponent(bing)
+    ];
+    for(var i=0;i<urls.length;i++){
+      try{
+        var r = await fetch(urls[i]);
+        if(!r.ok) continue;
+        var html = await r.text();
+        var res = parseBing(html);
+        if(res.length) return { source: "bing (proxy)", results: res };
+      }catch(e){}
+    }
+    return null;
+  }
+
   var TABS = [
     ["all","All"], ["ai","AI"], ["images","Images"], ["videos","Videos"],
     ["youtube","YouTube"], ["papers","Papers"], ["books","Books / EPUB"],
@@ -627,6 +673,10 @@
     var frag = document.createDocumentFragment();
     frag.appendChild(label("Web results"));
     var web = await webResults();
+    if(!(web && web.results && web.results.length)){
+      var prox = await proxySearch(q);
+      if(prox) web = prox;
+    }
     if(web && web.results && web.results.length){
       frag.appendChild(webList(web.results));
     } else {
