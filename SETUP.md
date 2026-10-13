@@ -25,7 +25,7 @@ engines (Google, Bing, YouTube, Google Scholar, etc.) ke links bhi diye jaate ha
 **All · AI · Images · Videos · YouTube · Papers · Data · OSINT · Books/EPUB · PDF · PPT · Drive · Terabox · Archive**
 
 - **All** — Wikipedia answer + articles + 8 general engines
-- **AI** — Sarvam **Indus AI** (highlighted) + ChatGPT, Perplexity, Gemini, Claude, Copilot, Grok, DeepSeek, You.com
+- **AI** — **in-app jawab** (free AI, bina login, aapki bhasha me) + Sarvam Indus AI + ChatGPT, Perplexity, Gemini, Claude, Copilot, Grok, DeepSeek, You.com
 - **Images** — Wikimedia Commons image grid + Google/Bing Images, Unsplash, Pexels, Openverse
 - **Videos** — Internet Archive videos + YouTube, Vimeo, Dailymotion
 - **Papers** — live results from Crossref, OpenAlex, arXiv + Google Scholar, Semantic Scholar, PubMed, CORE
