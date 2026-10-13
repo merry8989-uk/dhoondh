@@ -10,8 +10,8 @@ Live site: **https://merry8989-uk.github.io/dhoondh/**
 
 | Tab | What it shows |
 |-----|----------------|
-| **All** | Wikipedia answer + articles, and 8 general engines (Google, DuckDuckGo, Bing, Brave, YouTube, Images, News, Maps) |
-| **AI** | **In-app answers** (free AI, no login, replies in your language) + Sarvam **Indus AI** and ChatGPT, Perplexity, Gemini, Claude, Copilot, Grok, DeepSeek, You.com |
+| **All** | **AI summary** of the web results + Wikipedia answer + articles, and 8 general engines (Google, DuckDuckGo, Bing, Brave, YouTube, Images, News, Maps) |
+| **AI** | **In-app answers** with a model picker (Smart / Fast / Mistral) — free, no login, replies in your language — plus Sarvam **Indus AI** and ChatGPT, Perplexity, Gemini, Claude, Copilot, Grok, DeepSeek, You.com |
 | **Images** | Real image grid from Wikimedia Commons + Google/Bing Images, Unsplash, Pexels, Openverse |
 | **Videos** | Real videos from the Internet Archive + YouTube, Google Videos, Vimeo, Dailymotion |
 | **YouTube** | YouTube, YouTube Music, Shorts, latest uploads |
