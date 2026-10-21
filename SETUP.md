@@ -187,6 +187,10 @@ rest, centrally enforced retention, aur session replay.
   successful reply ke baad synced mark hota hai — kuch khota ya duplicate nahi hota. Ek-baar ka
   setup (Notion integration token + database share, Worker variables `NOTION_TOKEN` aur
   `NOTION_DB_ID`) `worker/README.md` me hai.
+- **Ye Notion controls sirf OWNER ko dikhte hain** — public user ko Notion ka naam bhi nahi
+  dikhta (Settings panel me sirf logging consent, filter aur export rehte hain). Apne device par
+  ek baar app `?owner=1` ke saath kholo — controls unlock ho jaayenge (lock karne ke liye
+  `?owner=0`). Background sync dono haalat me chalta rehta hai.
 
 ## Contact / Feedback
 

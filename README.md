@@ -159,6 +159,9 @@ encryption at rest, centrally enforced retention, and session replay.
   reply, so nothing is lost or duplicated. One-time setup (Notion integration token + database
   shared with it, set as Worker variables `NOTION_TOKEN` and `NOTION_DB_ID`) is in
   `worker/README.md`.
+- **Owner-only UI** — the Notion controls are hidden from public users (they never see the
+  words "Notion" in the app). Open the app once with `?owner=1` on your own device to reveal
+  them (`?owner=0` to lock again). The silent background sync runs either way.
 
 ## Contact / Feedback
 
