@@ -113,6 +113,33 @@ everything and downloads the file for a single drag-in.
 Logs stay on your device only (localStorage) — nothing is sent anywhere unless you press
 Email or Share. Diagnostics are **ON by default** and can be switched off with the toggle.
 
+### Logging standard (ProGallery Logging Spec v1.0)
+
+Events are **structured JSON**, not free text, and carry the shared envelope
+(`event_name`, `schema_version`, `timestamp` ISO-8601 UTC, `session_id`, `attempt_id`,
+`user_id`, `platform`, `app_version`, `os`, `device_model`, `network_type`,
+`screen_or_route`, `log_level`, `release_channel`).
+
+- **Naming:** `object_action` in snake_case — `search_performed`, `api_call`, `js_error`.
+- **Levels:** debug / info / warn / error. Errors stay at 100%; info/debug are sampled once
+  the buffer is busy (>200 events).
+- **Correlation:** `session_id` per visit; `attempt_id` groups intent → outcome.
+- **Retention:** 7 days / 500 events, enforced on load; `schema_version` bumps on breaking changes.
+- **Validation:** every event is validated against the schema before it is stored
+  (`schema_valid` is recorded on each event).
+- **PII redaction (DPDP-aligned):** raw search queries are **never** logged — only
+  `query_length`; API endpoints are reduced to host + route (so `/page/summary/ISRO` becomes
+  `en.wikipedia.org/api/rest_v1`); full URLs with parameters, email / phone / name and raw
+  file paths are never logged; `user_id` is a **salted hash**, never a raw identifier.
+- **Consent:** the toggle is an opt-out for logging; default ON.
+- **Events:** session_start, page_view, search_performed, search_no_results, api_call,
+  js_error, web_vitals, form_start / form_submit / form_abandon, feedback_submitted,
+  conversion, error_state_shown — plus friction signals rage_click, dead_click,
+  back_button_spam, scroll_depth, drop_off, time_to_first_value.
+
+Not possible from a static client (stated honestly): CI schema validation, server-side
+encryption at rest, centrally enforced retention, and session replay.
+
 ## Contact / Feedback
 
 Suggestion, feedback ya naya feature chahiye? Instagram par

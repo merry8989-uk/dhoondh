@@ -146,6 +146,29 @@ Header me **Diagnostics** button hai. Usme device/browser/settings ki info aur a
 Logs sirf aapke device par (localStorage) rehte hain — Email/Share dabane tak kahin nahi jaate.
 Diagnostics **default ON** hain; toggle se off kar sakte ho.
 
+### Logging standard (ProGallery Logging Spec v1.0)
+
+Events **structured JSON** hain (free text nahi), aur shared envelope follow karte hain:
+`event_name`, `schema_version`, `timestamp` (ISO-8601 UTC), `session_id`, `attempt_id`,
+`user_id`, `platform`, `app_version`, `os`, `device_model`, `network_type`,
+`screen_or_route`, `log_level`, `release_channel`.
+
+- **Naming:** `object_action` snake_case — jaise `search_performed`, `api_call`, `js_error`.
+- **Levels:** debug / info / warn / error. Errors 100%; info/debug buffer bharne par sampled.
+- **Correlation:** `session_id` har visit ka; `attempt_id` intent → outcome ko jodta hai.
+- **Retention:** 7 din / 500 events, load par enforce.
+- **Validation:** har event store hone se pehle schema se validate hota hai (`schema_valid` field).
+- **PII redaction (DPDP):** **raw search query kabhi log nahi hoti** — sirf `query_length`;
+  API endpoint sirf host + route (jaise `/page/summary/ISRO` → `en.wikipedia.org/api/rest_v1`);
+  full URLs with params, email/phone/name, raw file paths — kabhi nahi; `user_id` **salted hash**.
+- **Consent:** toggle opt-out hai; default ON.
+- **Events:** session_start, page_view, search_performed, search_no_results, api_call, js_error,
+  web_vitals, form_start/submit/abandon, feedback_submitted, conversion, error_state_shown —
+  aur friction signals: rage_click, dead_click, back_button_spam, scroll_depth, drop_off, time_to_first_value.
+
+Jo static client se possible nahi (saaf-saaf): CI schema validation, server-side encryption at
+rest, centrally enforced retention, aur session replay.
+
 ## Contact / Feedback
 
 App ke header me **Feedback** button hai (aur footer me bhi contact line) — dono

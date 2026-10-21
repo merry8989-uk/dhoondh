@@ -204,7 +204,8 @@
 <div id="diagOverlay" class="overlay" hidden>
   <div class="panel" role="dialog" aria-modal="true" aria-label="Diagnostics">
     <h2>Diagnostics</h2>
-    <div class="sw"><input type="checkbox" id="diagToggle"><label for="diagToggle">Diagnostics ON — logs sirf isi device par store hote hain</label></div>
+    <div class="sw"><input type="checkbox" id="diagToggle"><label for="diagToggle">Logging consent — ON (opt-out anytime). Structured JSON events, sirf isi device par.</label></div>
+    <p style="font-size:12px;color:var(--muted);margin:6px 0 0">Schema v1.0.0 · retention 7 din · raw search queries, full URLs, email/phone/name kabhi log nahi hote.</p>
     <div class="prow">
       <button id="diagGmail" class="btn hl" type="button">Gmail (link)</button>
       <button id="diagShare" class="btn" type="button">Share / Attach</button>
@@ -221,7 +222,7 @@
       <button class="btn" type="button" data-fmt="csv">.csv (Excel)</button>
     </div>
     <div id="diagMsg" style="font-size:12.5px;color:var(--accent);margin-top:8px;min-height:16px"></div>
-    <div class="label" style="margin-top:12px">Environment</div>
+    <div class="label" style="margin-top:12px">Session context</div>
     <pre id="diagEnv"></pre>
     <div class="label" style="margin-top:12px">Logs (<span id="diagCount">0</span>)</div>
     <pre id="diagLogs"></pre>
@@ -693,7 +694,6 @@
       b.textContent = t[1];
       b.addEventListener("click", function(){
         tab = t[0];
-        diagLog("tab", t[0]);
         var u = new URL(location.href); u.searchParams.set("tab", tab);
         history.replaceState(null, "", u);
         render();
@@ -849,6 +849,7 @@
   function webSetupCard(web){
     var card = el("div","card answer");
     var set = !!backend;
+    track("error_state_shown", "warn", { error_code: (web && web.error) ? "backend_fetch_failed" : (web && web.blocked ? "source_blocked" : "web_results_unavailable"), screen: routeName(), message_key: set ? "web_results_failed" : "backend_not_configured" });
     card.appendChild(el("h3", null, set ? "Web results nahi aaye" : "Web results ke liye free backend lagao"));
     var msg;
     if(set && web && web.error){
@@ -961,6 +962,13 @@
       if(prox) web = prox;
     }
     var hasWeb = !!(web && web.results && web.results.length);
+    ATTEMPT = "att_" + Math.random().toString(36).slice(2, 8);
+    if(hasWeb){
+      track("search_performed", "info", { query_length: q.length, result_count: web.results.length, tab: tab });
+      if(!FIRST_VALUE){ FIRST_VALUE = Date.now(); track("time_to_first_value", "info", { flow: "session_start_to_first_search", duration_ms: FIRST_VALUE - SESSION_START }); }
+    } else {
+      track("search_no_results", "warn", { query_length: q.length, tab: tab });
+    }
     frag.appendChild(label(hasWeb ? ("Web results · " + web.results.length) : "Web results"));
     if(hasWeb){
       if(web.results.length >= 3){
@@ -1113,181 +1121,330 @@
     return frag;
   }
 
-  // ---------- diagnostics & logs ----------
-  var DIAG_KEY = "dhoondh.diag", LOG_KEY = "dhoondh.logs", APP_VER = "1.0";
-  var diagOn = localStorage.getItem(DIAG_KEY) !== "0";   // ON by default
-  var logs = [];
-  try { logs = JSON.parse(localStorage.getItem(LOG_KEY) || "[]") || []; } catch(e){ logs = []; }
+  // ---------- diagnostics — ProGallery Logging Spec v1.0 (web side) ----------
+  // Structured JSON events + common envelope + correlation ids + deliberate levels +
+  // sampling at scale + retention + strict PII redaction (raw queries are NEVER logged).
+  var SCHEMA_VERSION = "1.0.0", APP_VERSION = "1.0.0", RELEASE_CHANNEL = "production";
+  var DIAG_KEY = "dhoondh.diag", LOG_KEY = "dhoondh.logs", SALT_KEY = "dhoondh.salt";
+  var RETENTION_DAYS = 7, MAX_EVENTS = 500;
+  var diagOn = localStorage.getItem(DIAG_KEY) !== "0";   // consent / opt-out — ON by default
+  var SESSION_ID = "sess_" + Math.random().toString(36).slice(2, 10);
+  var ATTEMPT = null, SESSION_START = Date.now(), MAX_SCROLL = 0, LAST_EVENT = null, FIRST_VALUE = null;
 
-  function shortUrl(u){
-    try { var x = new URL(u, location.href); return (x.host || "") + x.pathname + (x.search ? x.search.slice(0, 80) : ""); }
-    catch(e){ return String(u).slice(0, 120); }
+  function rnd(p){ return p + Math.random().toString(36).slice(2, 8); }
+  function hashStr(s){ var h = 0; s = String(s || ""); for (var i = 0; i < s.length; i++) { h = ((h << 5) - h + s.charCodeAt(i)) | 0; } return Math.abs(h).toString(36); }
+  function safePath(u){ try { return new URL(u, location.href).pathname; } catch (e) { return String(u).split("?")[0].slice(0, 120); } }
+  // endpoint id for api_call: host + at most two path segments, so identifiers that live
+  // in the path (e.g. /page/summary/ISRO) are never logged.
+  function endpointOf(u){
+    try {
+      var x = new URL(u, location.href);
+      var seg = x.pathname.split("/").filter(Boolean).slice(0, 2).join("/");
+      return x.hostname + (seg ? "/" + seg : "");
+    } catch (e) { return String(u).split("?")[0].slice(0, 80); }
+  }
+  function deviceClass(){ if (/Mobi|Android|iPhone/i.test(navigator.userAgent)) return "mobile"; return window.innerWidth < 900 ? "tablet" : "desktop"; }
+  function osString(){
+    var ua = navigator.userAgent, os = "unknown", br = "unknown", m;
+    if ((m = ua.match(/Android\s([\d.]+)/))) os = "Android " + m[1];
+    else if ((m = ua.match(/iPhone OS ([\d_]+)/))) os = "iOS " + m[1].replace(/_/g, ".");
+    else if (/Windows NT/.test(ua)) os = "Windows";
+    else if (/Mac OS X/.test(ua)) os = "macOS";
+    else if (/Linux/.test(ua)) os = "Linux";
+    if (/Edg\//.test(ua)) br = "Edge";
+    else if (/OPR\//.test(ua)) br = "Opera";
+    else if (/Chrome\//.test(ua)) br = "Chrome";
+    else if (/Firefox\//.test(ua)) br = "Firefox";
+    else if (/Safari\//.test(ua)) br = "Safari";
+    return os + " / " + br;
+  }
+  function netType(){ try { var c = navigator.connection || navigator.mozConnection; if (c && c.effectiveType) return c.effectiveType; } catch (e) {} return navigator.onLine ? "online" : "offline"; }
+  function routeName(){ return q ? ("results:" + tab) : "home"; }
+  var OS_STR = osString(), DEVICE_CLASS = deviceClass();
+  function deviceHash(){
+    var salt = localStorage.getItem(SALT_KEY);
+    if (!salt) { salt = rnd(""); try { localStorage.setItem(SALT_KEY, salt); } catch (e) {} }
+    return "u_" + hashStr(salt + "|" + navigator.userAgent);
+  }
+  var USER_ID = deviceHash();
+
+  var events = [];
+  try { events = JSON.parse(localStorage.getItem(LOG_KEY) || "[]") || []; } catch (e) { events = []; }
+  (function () {   // retention policy: 7 days, max 500 events
+    var cut = Date.now() - RETENTION_DAYS * 86400000;
+    events = events.filter(function (e) { var t = Date.parse(e.timestamp); return isNaN(t) || t >= cut; });
+    if (events.length > MAX_EVENTS) events = events.slice(-MAX_EVENTS);
+  })();
+
+  var ENV_REQ = ["event_name", "schema_version", "timestamp", "session_id", "platform", "app_version", "os", "device_model", "screen_or_route", "log_level"];
+  var ENV_KEYS = ENV_REQ.concat(["attempt_id", "user_id", "network_type", "release_channel"]);
+  var LEVELS = ["debug", "info", "warn", "error"];
+  function validateEvent(ev){
+    for (var i = 0; i < ENV_REQ.length; i++) { if (ev[ENV_REQ[i]] == null || ev[ENV_REQ[i]] === "") return "missing:" + ENV_REQ[i]; }
+    if (LEVELS.indexOf(ev.log_level) < 0) return "invalid:log_level";
+    if (!/^[a-z][a-z0-9]*(_[a-z0-9]+)+$/.test(ev.event_name)) return "invalid:event_name";
+    return null;
+  }
+  function envelope(name, level, props){
+    var ev = {
+      event_name: name, schema_version: SCHEMA_VERSION, timestamp: new Date().toISOString(),
+      session_id: SESSION_ID, platform: "web", app_version: APP_VERSION, os: OS_STR,
+      device_model: DEVICE_CLASS, network_type: netType(), screen_or_route: routeName(),
+      log_level: level, release_channel: RELEASE_CHANNEL, user_id: USER_ID
+    };
+    if (ATTEMPT) ev.attempt_id = ATTEMPT;
+    if (props) { for (var k in props) { if (Object.prototype.hasOwnProperty.call(props, k)) ev[k] = props[k]; } }
+    return ev;
+  }
+  function track(name, level, props){
+    if (!diagOn) return;
+    level = level || "info";
+    // sampling "at scale": 100% of warn/error, info/debug sampled once the buffer is busy
+    if ((level === "info" || level === "debug") && events.length > 200 && Math.random() > 0.25) return;
+    var ev = envelope(name, level, props);
+    var bad = validateEvent(ev);
+    ev.schema_valid = !bad;
+    if (bad) { ev.validation_error = bad; if (ev.log_level === "info" || ev.log_level === "debug") ev.log_level = "warn"; }
+    events.push(ev);
+    if (events.length > MAX_EVENTS) events = events.slice(-MAX_EVENTS);
+    try { localStorage.setItem(LOG_KEY, JSON.stringify(events)); } catch (e) {}
+    LAST_EVENT = name;
+    var lg = document.getElementById("diagLogs"); if (lg) lg.textContent = logsText();
+    var c = document.getElementById("diagCount"); if (c) c.textContent = String(events.length);
   }
   function logsText(){
-    return logs.map(function(l){ return l.t + "  [" + l.level + "]  " + l.msg + (l.data ? "  |  " + l.data : ""); }).join("\n");
+    return events.map(function (e) {
+      var extra = [];
+      for (var k in e) { if (e.hasOwnProperty(k) && ENV_KEYS.indexOf(k) < 0 && k !== "schema_valid" && k !== "validation_error") extra.push(k + "=" + e[k]); }
+      return e.timestamp + "  [" + e.log_level + "]  " + e.event_name + "  route=" + e.screen_or_route +
+             "  sess=" + e.session_id + (e.attempt_id ? "  att=" + e.attempt_id : "") +
+             (extra.length ? "  " + extra.join("  ") : "");
+    }).join("\n");
   }
-  function diagLog(level, msg, data){
-    if(!diagOn) return;
-    var entry = { t: new Date().toISOString(), level: level, msg: String(msg == null ? "" : msg).slice(0, 500) };
-    if(data !== undefined){ try { entry.data = JSON.stringify(data).slice(0, 800); } catch(e){} }
-    logs.push(entry);
-    if(logs.length > 300) logs = logs.slice(-300);
-    try { localStorage.setItem(LOG_KEY, JSON.stringify(logs)); } catch(e){}
-    var lg = document.getElementById("diagLogs"); if(lg) lg.textContent = logsText();
-    var c = document.getElementById("diagCount"); if(c) c.textContent = String(logs.length);
-  }
-  function diagEnv(){
-    var standalone = (window.matchMedia && window.matchMedia("(display-mode: standalone)").matches);
-    var keys = "";
-    try { keys = Object.keys(localStorage).filter(function(k){ return k.indexOf("dhoondh") === 0; }).join(", "); } catch(e){}
+  function contextText(){
+    var keys = "-";
+    try { keys = Object.keys(localStorage).filter(function (k) { return k.indexOf("dhoondh") === 0; }).join(", "); } catch (e) {}
     return [
-      "app_version : " + APP_VER,
-      "generated   : " + new Date().toISOString(),
-      "page_url    : " + location.href,
-      "online      : " + navigator.onLine,
-      "display     : " + (standalone ? "standalone (installed)" : "browser"),
-      "service_wkr : " + (("serviceWorker" in navigator) ? "supported" : "no"),
-      "screen      : " + screen.width + "x" + screen.height + " @dpr " + (window.devicePixelRatio || 1),
-      "viewport    : " + window.innerWidth + "x" + window.innerHeight,
-      "language    : " + navigator.language,
-      "wiki_lang   : " + lang,
-      "ai_model    : " + aiModel,
-      "backend     : " + (backend || "(none)"),
-      "timezone    : " + (((Intl.DateTimeFormat().resolvedOptions() || {}).timeZone) || "?"),
-      "platform    : " + (navigator.platform || "-"),
-      "storage_keys: " + (keys || "-"),
-      "user_agent  : " + navigator.userAgent
+      "schema_version : " + SCHEMA_VERSION,
+      "app_version    : " + APP_VERSION,
+      "release_channel: " + RELEASE_CHANNEL,
+      "session_id     : " + SESSION_ID,
+      "user_id        : " + USER_ID + "  (salted hash, no raw identifier)",
+      "platform       : web",
+      "os             : " + OS_STR,
+      "device_model   : " + DEVICE_CLASS,
+      "network_type   : " + netType(),
+      "screen_or_route: " + routeName(),
+      "viewport       : " + window.innerWidth + "x" + window.innerHeight,
+      "timezone       : " + (((Intl.DateTimeFormat().resolvedOptions() || {}).timeZone) || "?"),
+      "consent        : " + (diagOn ? "granted (logging ON)" : "withdrawn (logging OFF)"),
+      "retention      : " + RETENTION_DAYS + " days, max " + MAX_EVENTS + " events",
+      "redaction      : raw search queries, full URLs with params, email/phone/name are never logged",
+      "storage_keys   : " + keys
     ].join("\n");
   }
-  function diagReportText(){
-    return "Dhoondh diagnostics\n===================\n\n" + diagEnv() + "\n\nLogs (" + logs.length + ")\n----------------\n" + logsText() + "\n";
+  function reportJSON(){
+    return JSON.stringify({ app: "Dhoondh", schema_version: SCHEMA_VERSION, exported_at: new Date().toISOString(),
+      session_id: SESSION_ID, retention_days: RETENTION_DAYS, event_count: events.length, consent: diagOn,
+      events: events }, null, 2);
   }
-  function diagReportMD(){
-    return "# Dhoondh diagnostics\n\n_Generated " + new Date().toISOString() + "_\n\n## Environment\n\n```\n" + diagEnv() +
-           "\n```\n\n## Logs (" + logs.length + ")\n\n```\n" + logsText() + "\n```\n";
+  function reportText(){
+    return "Dhoondh diagnostics (schema v" + SCHEMA_VERSION + ")\n=========================================\n\n" +
+      contextText() + "\n\nEvents (" + events.length + ")\n----------------\n" + logsText() + "\n";
   }
-  function diagReportJSON(){
-    return JSON.stringify({ app: "Dhoondh", version: APP_VER, generated: new Date().toISOString(),
-      env: diagEnv().split("\n"), logs: logs }, null, 2);
+  function reportMD(){
+    return "# Dhoondh diagnostics\n\n_schema v" + SCHEMA_VERSION + " · exported " + new Date().toISOString() + "_\n\n## Session context\n\n```\n" +
+      contextText() + "\n```\n\n## Events (" + events.length + ")\n\n```\n" + logsText() + "\n```\n";
   }
-  function diagReportCSV(){
-    var rows = [["time", "level", "message", "data"]];
-    logs.forEach(function(l){ rows.push([l.t, l.level, l.msg, l.data || ""]); });
-    return rows.map(function(r){ return r.map(function(c){ return '"' + String(c).replace(/"/g, '""') + '"'; }).join(","); }).join("\r\n");
+  function reportCSV(){
+    var cols = ENV_KEYS.concat(["schema_valid", "validation_error", "props"]);
+    var rows = [cols];
+    events.forEach(function (e) {
+      var props = {};
+      for (var k in e) { if (e.hasOwnProperty(k) && ENV_KEYS.indexOf(k) < 0 && ["schema_valid", "validation_error"].indexOf(k) < 0) props[k] = e[k]; }
+      rows.push(cols.map(function (c) { if (c === "props") return JSON.stringify(props); return e[c] == null ? "" : e[c]; }));
+    });
+    return rows.map(function (r) { return r.map(function (c) { return '"' + String(c).replace(/"/g, '""') + '"'; }).join(","); }).join("\r\n");
   }
-  function diagMsg(s){ var m = document.getElementById("diagMsg"); if(m) m.textContent = s; }
+  function diagMsg(s){ var m = document.getElementById("diagMsg"); if (m) m.textContent = s; }
   function diagDownload(name, text, mime){
     try {
       var blob = new Blob([text], { type: mime + ";charset=utf-8" });
       var a = document.createElement("a");
       a.href = URL.createObjectURL(blob); a.download = name;
       document.body.appendChild(a); a.click();
-      setTimeout(function(){ URL.revokeObjectURL(a.href); a.remove(); }, 800);
+      setTimeout(function () { URL.revokeObjectURL(a.href); a.remove(); }, 800);
       diagMsg("Download: " + name);
-    } catch(e){ diagMsg("Download fail: " + e.message); }
+    } catch (e) { diagMsg("Download fail: " + e.message); }
   }
   function diagRender(){
-    var e = document.getElementById("diagEnv"); if(e) e.textContent = diagEnv();
-    var l = document.getElementById("diagLogs"); if(l) l.textContent = logsText();
-    var c = document.getElementById("diagCount"); if(c) c.textContent = String(logs.length);
-    var t = document.getElementById("diagToggle"); if(t) t.checked = diagOn;
+    var e = document.getElementById("diagEnv"); if (e) e.textContent = contextText();
+    var l = document.getElementById("diagLogs"); if (l) l.textContent = logsText();
+    var c = document.getElementById("diagCount"); if (c) c.textContent = String(events.length);
+    var t = document.getElementById("diagToggle"); if (t) t.checked = diagOn;
   }
   function diagEmail(){
-    var body = diagReportText();
-    if(body.length > 5000) body = body.slice(0, 5000) + "\n\n…(baaki logs ke liye file attach karo)";
+    var body = reportText();
+    if (body.length > 5000) body = body.slice(0, 5000) + "\n\n…(full log attached file me hai)";
     var subject = "Dhoondh diagnostics - " + new Date().toISOString().slice(0, 16).replace("T", " ");
     location.href = "mailto:br19shc39@gmail.com?subject=" + encodeURIComponent(subject) + "&body=" + encodeURIComponent(body);
     diagMsg("Email app khul raha hai — logs pehle se bhare hue hain.");
   }
-  // Gmail web compose: fills To/Subject/Body, and downloads the log file so it is
-  // ready to attach. (A link alone cannot attach a local file — no mail client allows
-  // that. On Android, use "Share / Attach" and pick Gmail to attach it automatically.)
+  // Gmail web compose: prefills To/Subject/Body and downloads the log file for attaching.
+  // (A link cannot attach a local file — on Android use Share/Attach + Gmail for auto-attach.)
   function diagGmail(){
-    var text = diagReportText();
+    var text = reportText();
     var stamp = new Date().toISOString().slice(0, 16).replace(/[:T]/g, "-");
     diagDownload("dhoondh-diagnostics-" + stamp + ".txt", text, "text/plain");
     var body = text;
-    if(body.length > 8000) body = body.slice(0, 8000) + "\n\n…(poora log attached file me hai)";
+    if (body.length > 8000) body = body.slice(0, 8000) + "\n\n…(poora log attached file me hai)";
     var url = "https://mail.google.com/mail/?view=cm&fs=1&to=" + encodeURIComponent("br19shc39@gmail.com") +
-              "&su=" + encodeURIComponent("Dhoondh diagnostics - " + stamp) +
-              "&body=" + encodeURIComponent(body);
-    try { window.open(url, "_blank", "noopener"); } catch(e){ location.href = url; }
+              "&su=" + encodeURIComponent("Dhoondh diagnostics - " + stamp) + "&body=" + encodeURIComponent(body);
+    try { window.open(url, "_blank", "noopener"); } catch (e) { location.href = url; }
     diagMsg("Gmail compose khula + log file download ho gayi — bas file attach kar do. (Android par 'Share / Attach' se Gmail chuno: file apne aap attach ho jaayegi.)");
   }
   async function diagShare(){
-    var text = diagReportText();
+    var text = reportText();
     var file = null;
-    try { file = new File([text], "dhoondh-diagnostics.txt", { type: "text/plain" }); } catch(e){}
+    try { file = new File([text], "dhoondh-diagnostics.txt", { type: "text/plain" }); } catch (e) {}
     try {
-      if(file && navigator.canShare && navigator.canShare({ files: [file] })){
-        await navigator.share({ title: "Dhoondh diagnostics", files: [file] });
-        diagMsg("Share kiya."); return;
-      }
-      if(navigator.share){
-        await navigator.share({ title: "Dhoondh diagnostics", text: text.slice(0, 4000) });
-        diagMsg("Share kiya."); return;
-      }
-    } catch(e){}
+      if (file && navigator.canShare && navigator.canShare({ files: [file] })) { await navigator.share({ title: "Dhoondh diagnostics", files: [file] }); diagMsg("Share kiya."); return; }
+      if (navigator.share) { await navigator.share({ title: "Dhoondh diagnostics", text: text.slice(0, 4000) }); diagMsg("Share kiya."); return; }
+    } catch (e) {}
     diagDownload("dhoondh-diagnostics.txt", text, "text/plain");
   }
   function diagCopy(){
-    var text = diagReportText();
-    if(navigator.clipboard && navigator.clipboard.writeText){
-      navigator.clipboard.writeText(text).then(function(){ diagMsg("Copy ho gaya."); }, function(){ diagMsg("Copy fail."); });
+    var text = reportText();
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(function () { diagMsg("Copy ho gaya."); }, function () { diagMsg("Copy fail."); });
     } else { diagMsg("Clipboard support nahi."); }
   }
-  (function(){
+  (function () {
     var dOpen = document.getElementById("diagOpen"), dOv = document.getElementById("diagOverlay");
-    if(dOpen) dOpen.addEventListener("click", function(){ if(dOv) dOv.hidden = false; diagRender(); });
+    if (dOpen) dOpen.addEventListener("click", function () { if (dOv) dOv.hidden = false; diagRender(); });
     var dClose = document.getElementById("diagClose");
-    if(dClose) dClose.addEventListener("click", function(){ if(dOv) dOv.hidden = true; });
-    if(dOv) dOv.addEventListener("click", function(e){ if(e.target === dOv) dOv.hidden = true; });
+    if (dClose) dClose.addEventListener("click", function () { if (dOv) dOv.hidden = true; });
+    if (dOv) dOv.addEventListener("click", function (e) { if (e.target === dOv) dOv.hidden = true; });
     var dTog = document.getElementById("diagToggle");
-    if(dTog) dTog.addEventListener("change", function(){
+    if (dTog) dTog.addEventListener("change", function () {
       diagOn = dTog.checked;
       localStorage.setItem(DIAG_KEY, diagOn ? "1" : "0");
-      diagMsg("Diagnostics " + (diagOn ? "ON" : "OFF"));
-      diagLog("app", "diagnostics " + (diagOn ? "ON" : "OFF"));
+      diagMsg("Logging consent " + (diagOn ? "granted (ON)" : "withdrawn (OFF)"));
+      track("consent_changed", "info", { granted: diagOn });
     });
-    var dGm = document.getElementById("diagGmail"); if(dGm) dGm.addEventListener("click", diagGmail);
-    var dEm = document.getElementById("diagEmail"); if(dEm) dEm.addEventListener("click", diagEmail);
-    var dSh = document.getElementById("diagShare"); if(dSh) dSh.addEventListener("click", diagShare);
-    var dCp = document.getElementById("diagCopy"); if(dCp) dCp.addEventListener("click", diagCopy);
-    var dRf = document.getElementById("diagRefresh"); if(dRf) dRf.addEventListener("click", function(){ diagRender(); diagMsg("Refresh."); });
+    var dGm = document.getElementById("diagGmail"); if (dGm) dGm.addEventListener("click", diagGmail);
+    var dEm = document.getElementById("diagEmail"); if (dEm) dEm.addEventListener("click", diagEmail);
+    var dSh = document.getElementById("diagShare"); if (dSh) dSh.addEventListener("click", diagShare);
+    var dCp = document.getElementById("diagCopy"); if (dCp) dCp.addEventListener("click", diagCopy);
+    var dRf = document.getElementById("diagRefresh"); if (dRf) dRf.addEventListener("click", function () { diagRender(); diagMsg("Refresh."); });
     var dCl = document.getElementById("diagClear");
-    if(dCl) dCl.addEventListener("click", function(){ logs = []; try { localStorage.removeItem(LOG_KEY); } catch(e){} diagRender(); diagMsg("Logs clear."); });
-    Array.prototype.forEach.call(document.querySelectorAll("[data-fmt]"), function(b){
-      b.addEventListener("click", function(){
+    if (dCl) dCl.addEventListener("click", function () { events = []; try { localStorage.removeItem(LOG_KEY); } catch (e) {} diagRender(); diagMsg("Logs clear."); });
+    Array.prototype.forEach.call(document.querySelectorAll("[data-fmt]"), function (b) {
+      b.addEventListener("click", function () {
         var f = b.getAttribute("data-fmt");
-        if(f === "json") diagDownload("dhoondh-diagnostics.json", diagReportJSON(), "application/json");
-        else if(f === "md") diagDownload("dhoondh-diagnostics.md", diagReportMD(), "text/markdown");
-        else if(f === "csv") diagDownload("dhoondh-diagnostics.csv", diagReportCSV(), "text/csv");
-        else diagDownload("dhoondh-diagnostics.txt", diagReportText(), "text/plain");
+        if (f === "json") diagDownload("dhoondh-diagnostics.json", reportJSON(), "application/json");
+        else if (f === "md") diagDownload("dhoondh-diagnostics.md", reportMD(), "text/markdown");
+        else if (f === "csv") diagDownload("dhoondh-diagnostics.csv", reportCSV(), "text/csv");
+        else diagDownload("dhoondh-diagnostics.txt", reportText(), "text/plain");
       });
     });
   })();
 
-  // capture errors + failed/slow network calls
-  window.addEventListener("error", function(e){ diagLog("error", (e.message || "error") + " @ " + (e.filename || "") + ":" + (e.lineno || "")); });
-  window.addEventListener("unhandledrejection", function(e){ diagLog("error", "promise: " + ((e.reason && e.reason.message) || e.reason)); });
-  (function(){
+  // ---- instrumentation: Part D (web events) + Part E (friction signals) ----
+  track("session_start", "info", { start_type: "cold", cold_start_ms: Math.round(performance.now() || 0),
+    viewport: window.innerWidth + "x" + window.innerHeight,
+    tz: (((Intl.DateTimeFormat().resolvedOptions() || {}).timeZone) || "?") });
+
+  window.addEventListener("error", function (e) {
+    track("js_error", "error", { error_type: "uncaught", message: String(e.message || "").slice(0, 200),
+      stack_hash: hashStr((e.filename || "") + ":" + (e.lineno || "")), url: safePath(location.href), browser: OS_STR });
+  });
+  window.addEventListener("unhandledrejection", function (e) {
+    track("js_error", "error", { error_type: "unhandledrejection",
+      message: String((e.reason && e.reason.message) || e.reason || "").slice(0, 200),
+      stack_hash: hashStr(String((e.reason && e.reason.stack) || e.reason)), url: safePath(location.href), browser: OS_STR });
+  });
+
+  (function () {
     var rf = window.fetch;
-    if(!rf) return;
-    window.fetch = function(input, init){
+    if (!rf) return;
+    window.fetch = function (input, init) {
       var url = (typeof input === "string") ? input : ((input && input.url) || "");
       var t0 = Date.now();
-      return rf.apply(this, arguments).then(function(res){
-        var dt = Date.now() - t0;
-        if(!res.ok) diagLog("net", "HTTP " + res.status + "  " + shortUrl(url));
-        else if(dt > 3000) diagLog("net", "slow " + dt + "ms  " + shortUrl(url));
+      return rf.apply(this, arguments).then(function (res) {
+        track("api_call", res.ok ? "info" : "warn", { endpoint: endpointOf(url), method: ((init && init.method) || "GET"),
+          status_code: res.status, latency_ms: Date.now() - t0, retry_count: 0 });
         return res;
-      }, function(err){
-        diagLog("net", "FAIL  " + shortUrl(url) + "  (" + ((err && err.message) || err) + ")");
+      }, function (err) {
+        track("api_call", "error", { endpoint: endpointOf(url), method: ((init && init.method) || "GET"), status_code: 0,
+          latency_ms: Date.now() - t0, retry_count: 0, error_type: String((err && err.message) || err).slice(0, 120) });
         throw err;
       });
     };
   })();
-  diagLog("app", "start v" + APP_VER + "  tab=" + tab + (q ? "  q=" + q : ""));
+
+  (function () {   // web_vitals
+    try {
+      var nav = performance.getEntriesByType && performance.getEntriesByType("navigation")[0];
+      if (nav) track("web_vitals", "info", { ttfb_ms: Math.round(nav.responseStart || 0),
+        dom_content_loaded_ms: Math.round(nav.domContentLoadedEventEnd || 0), load_ms: Math.round(nav.loadEventEnd || 0) });
+    } catch (e) {}
+    var vit = {};
+    try {
+      if (window.PerformanceObserver) {
+        new PerformanceObserver(function (l) { l.getEntries().forEach(function (en) {
+          if (en.entryType === "largest-contentful-paint") vit.lcp_ms = Math.round(en.startTime);
+          if (en.entryType === "layout-shift" && !en.hadRecentInput) vit.cls = +(((vit.cls || 0) + en.value)).toFixed(4);
+        }); }).observe({ type: "largest-contentful-paint", buffered: true });
+        new PerformanceObserver(function (l) { l.getEntries().forEach(function (en) {
+          if (en.entryType === "layout-shift" && !en.hadRecentInput) vit.cls = +(((vit.cls || 0) + en.value)).toFixed(4);
+        }); }).observe({ type: "layout-shift", buffered: true });
+      }
+    } catch (e) {}
+    window.addEventListener("pagehide", function () {
+      if (vit.lcp_ms != null || vit.cls != null) track("web_vitals", "info", { lcp_ms: vit.lcp_ms || 0, cls: vit.cls || 0, inp_ms: 0, ttfb_ms: 0 });
+    });
+  })();
+
+  (function () {   // rage_click / dead_click
+    var clicks = [];
+    document.addEventListener("click", function (e) {
+      var el = e.target, now = Date.now();
+      var key = el.tagName + "." + String(el.className || "").slice(0, 24) + "#" + (el.id || "");
+      clicks.push({ key: key, t: now }); clicks = clicks.filter(function (c) { return now - c.t < 2000; });
+      var same = clicks.filter(function (c) { return c.key === key; });
+      if (same.length === 3) track("rage_click", "warn", { element: key.slice(0, 60), taps: same.length, window_ms: 2000 });
+      var interactive = /^(A|BUTTON|INPUT|SELECT|TEXTAREA|LABEL)$/.test(el.tagName) || (el.closest && el.closest("a,button,input,select,label,summary"));
+      if (!interactive) track("dead_click", "info", { element: key.slice(0, 60) });
+    }, true);
+  })();
+
+  (function () {   // back_button_spam + scroll_depth + drop_off
+    var backs = [];
+    window.addEventListener("popstate", function () {
+      var now = Date.now(); backs.push(now); backs = backs.filter(function (t) { return now - t < 2000; });
+      if (backs.length === 3) track("back_button_spam", "warn", { presses: backs.length, window_ms: 2000, route: routeName() });
+    });
+    function calc(){ var h = document.documentElement.scrollHeight - window.innerHeight; var p = h > 0 ? Math.round((window.scrollY / h) * 100) : 100; if (p > MAX_SCROLL) MAX_SCROLL = Math.min(100, p); }
+    window.addEventListener("scroll", calc, { passive: true });
+    window.addEventListener("pagehide", function () {
+      track("scroll_depth", "info", { scroll_percent: MAX_SCROLL, route: routeName() });
+      track("drop_off", "info", { last_event: LAST_EVENT || "", last_route: routeName(), session_ms: Date.now() - SESSION_START });
+    });
+  })();
+
+  (function () {   // form_start / form_submit / form_abandon
+    var f = document.getElementById("searchForm"), qi = document.getElementById("q");
+    var started = false, submitted = false, startedAt = 0;
+    if (qi) qi.addEventListener("focus", function () { if (!started) { started = true; startedAt = Date.now(); track("form_start", "info", { form_id: "search", step: 1, field_count: 1 }); } });
+    if (f) f.addEventListener("submit", function () { submitted = true; track("form_submit", "info", { form_id: "search", step: 1, field_count: 1 }); });
+    window.addEventListener("pagehide", function () { if (started && !submitted) track("form_abandon", "info", { form_id: "search", step: 1, field_count: 1, time_on_form_ms: Date.now() - startedAt }); });
+  })();
+
+  Array.prototype.forEach.call(document.querySelectorAll('a[href*="osintgram_io"]'), function (a) {
+    a.addEventListener("click", function () { track("feedback_submitted", "info", { page: routeName() }); });
+  });
+  window.addEventListener("appinstalled", function () { track("conversion", "info", { goal_name: "app_installed", source: routeName() }); });
 
   // ---------- render ----------
   function addHistory(query){
@@ -1314,6 +1471,7 @@
   }
   async function render(){
     results.innerHTML = "";
+    track("page_view", "info", { url_path: safePath(location.href), referrer: document.referrer ? safePath(document.referrer) : "", title_key: q ? "results" : "home" });
     if(!q){
       home.hidden = false; tabsEl.hidden = true;
       renderHome(); return;
@@ -1321,7 +1479,6 @@
     home.hidden = true; tabsEl.hidden = false;
     input.value = q; document.title = q + " — Dhoondh";
     addHistory(q);
-    diagLog("search", q + "  [tab=" + tab + "]");
     buildTabs();
 
     var loading = el("div","status","Dhoondh rahe hain: <b>" + esc(q) + "</b> …");
