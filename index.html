@@ -74,6 +74,9 @@
     word-break:break-word; color:var(--muted); margin:0}
   .panel .sw{display:flex; align-items:center; gap:10px; margin:10px 0 2px; font-size:14px}
   .panel .sw input{width:18px; height:18px; flex:0 0 18px}
+  .panel select, .panel input[type=text]{padding:8px 10px; border-radius:9px; border:1px solid var(--border);
+    background:var(--bg); color:var(--text); font-size:12.5px; font-family:inherit; max-width:100%}
+  .panel .code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-weight:600; letter-spacing:.5px}
 
   .install{padding:8px 14px; border-radius:10px; border:none; color:#fff; font-weight:600;
     font-size:13px; background:linear-gradient(135deg,var(--accent),var(--accent2));
@@ -206,6 +209,25 @@
     <h2>Diagnostics</h2>
     <div class="sw"><input type="checkbox" id="diagToggle"><label for="diagToggle">Logging consent — ON (opt-out anytime). Structured JSON events, sirf isi device par.</label></div>
     <p style="font-size:12px;color:var(--muted);margin:6px 0 0">Schema v1.0.0 · retention 7 din · raw search queries, full URLs, email/phone/name kabhi log nahi hote.</p>
+    <div class="prow">
+      <span style="font-size:12.5px;color:var(--muted)">User code:</span>
+      <b id="diagCode" class="code">—</b>
+      <button id="diagCodeCopy" class="btn" type="button">Copy code</button>
+    </div>
+    <div class="prow">
+      <span style="font-size:12.5px;color:var(--muted)">Filter:</span>
+      <select id="diagFLevel" aria-label="Filter by level">
+        <option value="">All levels</option>
+        <option value="debug">debug</option>
+        <option value="info">info</option>
+        <option value="warn">warn</option>
+        <option value="error">error</option>
+      </select>
+      <select id="diagFEvent" aria-label="Filter by event"><option value="">All events</option></select>
+      <input id="diagFText" type="text" placeholder="text…" aria-label="Filter text">
+      <button id="diagFReset" class="btn" type="button">Reset filter</button>
+      <span id="diagFCount" style="font-size:12.5px;color:var(--muted)"></span>
+    </div>
     <div class="prow">
       <button id="diagGmail" class="btn hl" type="button">Gmail (link)</button>
       <button id="diagShare" class="btn" type="button">Share / Attach</button>
@@ -1167,6 +1189,37 @@
     return "u_" + hashStr(salt + "|" + navigator.userAgent);
   }
   var USER_ID = deviceHash();
+  // readable per-device code so rows from one install group cleanly (a pseudonym, not PII)
+  var CODE_KEY = "dhoondh.code";
+  function makeUserCode(){
+    var c = localStorage.getItem(CODE_KEY);
+    if (!c) {
+      var A = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789", s = "";
+      for (var i = 0; i < 6; i++) s += A[Math.floor(Math.random() * A.length)];
+      c = "DH-" + s.slice(0, 3) + "-" + s.slice(3);
+      try { localStorage.setItem(CODE_KEY, c); } catch (e) {}
+    }
+    return c;
+  }
+  var USER_CODE = makeUserCode();
+
+  // ---- log filters (level / event / free text) ----
+  var FILTER = { level: "", event: "", text: "" };
+  function filteredEvents(){
+    return events.filter(function (e) {
+      if (FILTER.level && e.log_level !== FILTER.level) return false;
+      if (FILTER.event && e.event_name !== FILTER.event) return false;
+      if (FILTER.text) { var s = JSON.stringify(e).toLowerCase(); if (s.indexOf(FILTER.text.toLowerCase()) < 0) return false; }
+      return true;
+    });
+  }
+  function filterText(){
+    var p = [];
+    if (FILTER.level) p.push("level=" + FILTER.level);
+    if (FILTER.event) p.push("event=" + FILTER.event);
+    if (FILTER.text) p.push("text=" + FILTER.text);
+    return p.length ? p.join(" ") : "(none)";
+  }
 
   var events = [];
   try { events = JSON.parse(localStorage.getItem(LOG_KEY) || "[]") || []; } catch (e) { events = []; }
@@ -1177,7 +1230,7 @@
   })();
 
   var ENV_REQ = ["event_name", "schema_version", "timestamp", "session_id", "platform", "app_version", "os", "device_model", "screen_or_route", "log_level"];
-  var ENV_KEYS = ENV_REQ.concat(["attempt_id", "user_id", "network_type", "release_channel"]);
+  var ENV_KEYS = ENV_REQ.concat(["attempt_id", "user_id", "user_code", "network_type", "release_channel"]);
   var LEVELS = ["debug", "info", "warn", "error"];
   function validateEvent(ev){
     for (var i = 0; i < ENV_REQ.length; i++) { if (ev[ENV_REQ[i]] == null || ev[ENV_REQ[i]] === "") return "missing:" + ENV_REQ[i]; }
@@ -1190,7 +1243,7 @@
       event_name: name, schema_version: SCHEMA_VERSION, timestamp: new Date().toISOString(),
       session_id: SESSION_ID, platform: "web", app_version: APP_VERSION, os: OS_STR,
       device_model: DEVICE_CLASS, network_type: netType(), screen_or_route: routeName(),
-      log_level: level, release_channel: RELEASE_CHANNEL, user_id: USER_ID
+      log_level: level, release_channel: RELEASE_CHANNEL, user_id: USER_ID, user_code: USER_CODE
     };
     if (ATTEMPT) ev.attempt_id = ATTEMPT;
     if (props) { for (var k in props) { if (Object.prototype.hasOwnProperty.call(props, k)) ev[k] = props[k]; } }
@@ -1210,10 +1263,11 @@
     try { localStorage.setItem(LOG_KEY, JSON.stringify(events)); } catch (e) {}
     LAST_EVENT = name;
     var lg = document.getElementById("diagLogs"); if (lg) lg.textContent = logsText();
-    var c = document.getElementById("diagCount"); if (c) c.textContent = String(events.length);
+    var c = document.getElementById("diagCount"); if (c) c.textContent = filteredEvents().length + " / " + events.length;
+    var fc = document.getElementById("diagFCount"); if (fc) fc.textContent = filteredEvents().length + " of " + events.length + " shown";
   }
   function logsText(){
-    return events.map(function (e) {
+    return filteredEvents().map(function (e) {
       var extra = [];
       for (var k in e) { if (e.hasOwnProperty(k) && ENV_KEYS.indexOf(k) < 0 && k !== "schema_valid" && k !== "validation_error") extra.push(k + "=" + e[k]); }
       return e.timestamp + "  [" + e.log_level + "]  " + e.event_name + "  route=" + e.screen_or_route +
@@ -1229,6 +1283,7 @@
       "app_version    : " + APP_VERSION,
       "release_channel: " + RELEASE_CHANNEL,
       "session_id     : " + SESSION_ID,
+      "user_code      : " + USER_CODE + "  (readable per-device code)",
       "user_id        : " + USER_ID + "  (salted hash, no raw identifier)",
       "platform       : web",
       "os             : " + OS_STR,
@@ -1244,22 +1299,25 @@
     ].join("\n");
   }
   function reportJSON(){
+    var list = filteredEvents();
     return JSON.stringify({ app: "Dhoondh", schema_version: SCHEMA_VERSION, exported_at: new Date().toISOString(),
-      session_id: SESSION_ID, retention_days: RETENTION_DAYS, event_count: events.length, consent: diagOn,
-      events: events }, null, 2);
+      session_id: SESSION_ID, user_code: USER_CODE, retention_days: RETENTION_DAYS,
+      filter: filterText(), event_count: list.length, total_before_filter: events.length, consent: diagOn,
+      events: list }, null, 2);
   }
   function reportText(){
     return "Dhoondh diagnostics (schema v" + SCHEMA_VERSION + ")\n=========================================\n\n" +
-      contextText() + "\n\nEvents (" + events.length + ")\n----------------\n" + logsText() + "\n";
+      contextText() + "\n\nFilter         : " + filterText() +
+      "\nEvents (" + filteredEvents().length + " of " + events.length + ")\n----------------\n" + logsText() + "\n";
   }
   function reportMD(){
     return "# Dhoondh diagnostics\n\n_schema v" + SCHEMA_VERSION + " · exported " + new Date().toISOString() + "_\n\n## Session context\n\n```\n" +
-      contextText() + "\n```\n\n## Events (" + events.length + ")\n\n```\n" + logsText() + "\n```\n";
+      contextText() + "\n```\n\n## Filter\n\n`" + filterText() + "`\n\n## Events (" + filteredEvents().length + " of " + events.length + ")\n\n```\n" + logsText() + "\n```\n";
   }
   function reportCSV(){
     var cols = ENV_KEYS.concat(["schema_valid", "validation_error", "props"]);
     var rows = [cols];
-    events.forEach(function (e) {
+    filteredEvents().forEach(function (e) {
       var props = {};
       for (var k in e) { if (e.hasOwnProperty(k) && ENV_KEYS.indexOf(k) < 0 && ["schema_valid", "validation_error"].indexOf(k) < 0) props[k] = e[k]; }
       rows.push(cols.map(function (c) { if (c === "props") return JSON.stringify(props); return e[c] == null ? "" : e[c]; }));
@@ -1277,11 +1335,25 @@
       diagMsg("Download: " + name);
     } catch (e) { diagMsg("Download fail: " + e.message); }
   }
+  function refreshEventOptions(){
+    var sel = document.getElementById("diagFEvent");
+    if (!sel) return;
+    var cur = sel.value, names = {};
+    events.forEach(function (e) { names[e.event_name] = 1; });
+    sel.innerHTML = '<option value="">All events</option>' + Object.keys(names).sort().map(function (n) {
+      return '<option value="' + esc(n) + '">' + esc(n) + '</option>';
+    }).join("");
+    sel.value = cur;
+  }
   function diagRender(){
     var e = document.getElementById("diagEnv"); if (e) e.textContent = contextText();
     var l = document.getElementById("diagLogs"); if (l) l.textContent = logsText();
-    var c = document.getElementById("diagCount"); if (c) c.textContent = String(events.length);
+    var n = filteredEvents().length;
+    var c = document.getElementById("diagCount"); if (c) c.textContent = n + " / " + events.length;
+    var fc = document.getElementById("diagFCount"); if (fc) fc.textContent = n + " of " + events.length + " shown";
+    var code = document.getElementById("diagCode"); if (code) code.textContent = USER_CODE;
     var t = document.getElementById("diagToggle"); if (t) t.checked = diagOn;
+    refreshEventOptions();
   }
   function diagEmail(){
     var body = reportText();
@@ -1337,6 +1409,28 @@
     var dSh = document.getElementById("diagShare"); if (dSh) dSh.addEventListener("click", diagShare);
     var dCp = document.getElementById("diagCopy"); if (dCp) dCp.addEventListener("click", diagCopy);
     var dRf = document.getElementById("diagRefresh"); if (dRf) dRf.addEventListener("click", function () { diagRender(); diagMsg("Refresh."); });
+    var fl = document.getElementById("diagFLevel"), fe = document.getElementById("diagFEvent"), ft = document.getElementById("diagFText");
+    function applyFilter(){
+      FILTER.level = (fl && fl.value) || "";
+      FILTER.event = (fe && fe.value) || "";
+      FILTER.text = (ft && ft.value) || "";
+      diagRender();
+    }
+    if (fl) fl.addEventListener("change", applyFilter);
+    if (fe) fe.addEventListener("change", applyFilter);
+    if (ft) ft.addEventListener("input", applyFilter);
+    var fr = document.getElementById("diagFReset");
+    if (fr) fr.addEventListener("click", function () {
+      FILTER = { level: "", event: "", text: "" };
+      if (fl) fl.value = ""; if (fe) fe.value = ""; if (ft) ft.value = "";
+      diagRender(); diagMsg("Filter reset.");
+    });
+    var dc = document.getElementById("diagCodeCopy");
+    if (dc) dc.addEventListener("click", function () {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(USER_CODE).then(function () { diagMsg("User code copy ho gaya: " + USER_CODE); }, function () { diagMsg("Copy fail."); });
+      } else { diagMsg("User code: " + USER_CODE); }
+    });
     var dCl = document.getElementById("diagClear");
     if (dCl) dCl.addEventListener("click", function () { events = []; try { localStorage.removeItem(LOG_KEY); } catch (e) {} diagRender(); diagMsg("Logs clear."); });
     Array.prototype.forEach.call(document.querySelectorAll("[data-fmt]"), function (b) {

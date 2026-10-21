@@ -140,6 +140,18 @@ Events are **structured JSON**, not free text, and carry the shared envelope
 Not possible from a static client (stated honestly): CI schema validation, server-side
 encryption at rest, centrally enforced retention, and session replay.
 
+### User code and log filters
+
+- **User code** — every install gets a random, readable code (e.g. `DH-4F9-K2Q`), shown in the
+  panel and stamped on every event, so rows from one device group together and the data stays
+  clean. It is a pseudonym, not personal data.
+- **Filters** — filter logs by **level**, **event name** and **free text**; the counter shows
+  `shown / total`, and **exports respect the active filter** (export only the errors, or one
+  event type).
+- **Notion** — the events schema mirrors a Notion database ("Dhoondh Diagnostics — Events") with
+  ready-made views: All events, Errors, Warnings, Friction signals, By user code. Import the
+  app's `.csv` export into it.
+
 ## Contact / Feedback
 
 Suggestion, feedback ya naya feature chahiye? Instagram par

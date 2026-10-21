@@ -169,6 +169,18 @@ Events **structured JSON** hain (free text nahi), aur shared envelope follow kar
 Jo static client se possible nahi (saaf-saaf): CI schema validation, server-side encryption at
 rest, centrally enforced retention, aur session replay.
 
+### User code aur log filter
+
+- **User code** — har install ko ek random, padhne-layak code milta hai (jaise `DH-4F9-K2Q`), jo
+  panel me dikhta hai aur har event par lagta hai — isse ek device ke rows ek saath rehte hain aur
+  data saaf rehta hai. Ye pseudonym hai, personal data nahi.
+- **Filter** — logs ko **level**, **event name** aur **free text** se filter karo; counter
+  `shown / total` dikhata hai, aur **export bhi filter ke hisaab se hota hai** (sirf errors, ya ek
+  event type export karo).
+- **Notion** — events schema ek Notion database ("Dhoondh Diagnostics — Events") se match karta hai,
+  jisme ready views hain: All events, Errors, Warnings, Friction signals, By user code. App ka
+  `.csv` export usme import kar do.
+
 ## Contact / Feedback
 
 App ke header me **Feedback** button hai (aur footer me bhi contact line) — dono
