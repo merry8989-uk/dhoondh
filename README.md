@@ -92,10 +92,11 @@ Deploy it in ~2 minutes (one click) and paste the URL into the **"Web results ba
 field in the footer. Full steps: [`worker/README.md`](worker/README.md). The Worker can use
 the Brave Search API (key), a SearXNG instance, or DuckDuckGo HTML (no key).
 
-## Diagnostics
+## Settings — diagnostics & logs
 
-The header has a **Diagnostics** button. It shows the environment (device, browser, settings)
-and a rolling log of app events, errors and failed/slow network calls.
+The header's **Settings** button opens a panel that stays **hidden until you tap it** (and closes
+with **Band karo** / the backdrop). It shows the environment (device, browser, settings) and a
+rolling log of app events, errors and failed/slow network calls.
 
 - **Gmail (link)** — opens a Gmail compose window to `br19shc39@gmail.com` with To / Subject /
   Body already filled, **and downloads the log file** so it is ready to attach.
@@ -151,11 +152,13 @@ encryption at rest, centrally enforced retention, and session replay.
 - **Notion** — the events schema mirrors a Notion database ("Dhoondh Diagnostics — Events") with
   ready-made views: All events, Errors, Warnings, Friction signals, By user code. Import the
   app's `.csv` export into it.
-- **Notion sync** — the panel also has **Sync to Notion** (manual) and an **Auto-sync** checkbox
-  (background, off by default). Both POST unsynced events to your Worker's `/notion` route,
-  which writes them into the database. Events are marked synced only after a successful reply,
-  so nothing is lost or duplicated. One-time setup (Notion integration token + database shared
-  with it, set as Worker variables `NOTION_TOKEN` and `NOTION_DB_ID`) is in `worker/README.md`.
+- **Notion sync** — logs go to Notion **silently and automatically**: **Auto-sync is ON by
+  default**, so unsynced events are POSTed to your Worker's `/notion` route in the background and
+  land in the database, ready for a weekly review. The **Auto-sync to Notion** checkbox turns it
+  off; **Sync to Notion** forces a manual send. Events are marked synced only after a successful
+  reply, so nothing is lost or duplicated. One-time setup (Notion integration token + database
+  shared with it, set as Worker variables `NOTION_TOKEN` and `NOTION_DB_ID`) is in
+  `worker/README.md`.
 
 ## Contact / Feedback
 

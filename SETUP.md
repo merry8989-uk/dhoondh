@@ -129,9 +129,9 @@ Do tareeke:
 Phir `opensearch.xml`, `manifest.webmanifest` aur Chrome ke URL me
 `https://merry8989-uk.github.io/dhoondh/` ko apne URL se badal do.
 
-## Diagnostics
+## Settings — diagnostics & logs
 
-Header me **Diagnostics** button hai. Usme device/browser/settings ki info aur app ke logs
+Header me **Settings** button hai. Panel **tap karne tak chhupa rehta hai** (aur **Band karo** / backdrop se band ho jaata hai). Usme device/browser/settings ki info aur app ke logs
 (errors, failed/slow network calls, searches) dikhte hain.
 
 - **Gmail (link)** — Gmail ka compose khulta hai (`br19shc39@gmail.com`, To/Subject/Body bhare hue) **aur log file download ho jaati hai** — bas attach kar do.
@@ -180,11 +180,13 @@ rest, centrally enforced retention, aur session replay.
 - **Notion** — events schema ek Notion database ("Dhoondh Diagnostics — Events") se match karta hai,
   jisme ready views hain: All events, Errors, Warnings, Friction signals, By user code. App ka
   `.csv` export usme import kar do.
-- **Notion sync** — panel me **Sync to Notion** (manual) aur **Auto-sync** checkbox (background,
-  default OFF) hai. Dono unsynced events ko aapke Worker ke `/notion` route par bhejte hain, jo
-  unhe database me likh deta hai. Event sirf successful reply ke baad synced mark hota hai — kuch
-  khota ya duplicate nahi hota. Ek-baar ka setup (Notion integration token + database share,
-  Worker variables `NOTION_TOKEN` aur `NOTION_DB_ID`) `worker/README.md` me hai.
+- **Notion sync** — logs Notion me **chupchaap aur apne aap** jaate hain: **Auto-sync default ON**
+  hai, isliye unsynced events background me aapke Worker ke `/notion` route par jaate hain aur
+  database me pahunch jaate hain — hafte me ek baar review karne ke liye ready. **Auto-sync to
+  Notion** checkbox se off kar sakte ho; **Sync to Notion** se zabardasti bhej sakte ho. Event sirf
+  successful reply ke baad synced mark hota hai — kuch khota ya duplicate nahi hota. Ek-baar ka
+  setup (Notion integration token + database share, Worker variables `NOTION_TOKEN` aur
+  `NOTION_DB_ID`) `worker/README.md` me hai.
 
 ## Contact / Feedback
 
