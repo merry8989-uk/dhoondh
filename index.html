@@ -242,6 +242,7 @@
       <span id="notionCtl" hidden style="display:contents">
       <button id="diagNotion" class="btn" type="button">Sync to Notion</button>
       <label style="display:flex;align-items:center;gap:6px;font-size:12.5px;color:var(--muted)" title="Chupchaap background me Notion par save karta rahega"><input type="checkbox" id="diagAutoNotion"> Auto-sync to Notion</label>
+      <span id="diagSyncStatus" style="flex:1 1 100%; font-size:12px; color:var(--muted)">Sync status: —</span>
       </span>
     </div>
     <div class="prow">
@@ -1380,6 +1381,7 @@
     var c = document.getElementById("diagCount"); if (c) c.textContent = n + " / " + events.length;
     var fc = document.getElementById("diagFCount"); if (fc) fc.textContent = n + " of " + events.length + " shown · " + pendingEvents().length + " not synced";
     var code = document.getElementById("diagCode"); if (code) code.textContent = USER_CODE;
+    var ss = document.getElementById("diagSyncStatus"); if (ss) ss.textContent = syncStatusText();
     var t = document.getElementById("diagToggle"); if (t) t.checked = diagOn;
     refreshEventOptions();
   }
@@ -1419,6 +1421,15 @@
       navigator.clipboard.writeText(text).then(function () { diagMsg("Copy ho gaya."); }, function () { diagMsg("Copy fail."); });
     } else { diagMsg("Clipboard support nahi."); }
   }
+  var lastSync = null;   // { t, status, created, failed, error } — shown to the owner only
+  function syncStatusText(){
+    var pend = pendingEvents().length;
+    if (!lastSync) return "Sync status: koi attempt nahi" + (pend ? (" · " + pend + " pending") : "");
+    var ago = Math.round((Date.now() - lastSync.t) / 1000);
+    var when = ago < 60 ? (ago + "s pehle") : (Math.round(ago / 60) + "m pehle");
+    if (lastSync.error) return "Sync status: " + when + " · FAIL HTTP " + (lastSync.status || "-") + " · " + lastSync.error + " · " + pend + " pending";
+    return "Sync status: " + when + " · OK · " + (lastSync.created || 0) + " saved" + (lastSync.failed ? (" / " + lastSync.failed + " failed") : "") + " · " + pend + " pending";
+  }
   function pendingEvents(){ return events.filter(function (e) { return !e.synced; }); }
   function markSynced(list, sent){
     var n = (typeof sent === "number") ? sent : list.length;
@@ -1428,25 +1439,42 @@
   // Send events that have not been synced yet to the Worker's /notion route, which writes
   // them into the Notion database. The Notion token lives only in the Worker.
   async function syncNotion(silent){
-    if (!backend) { if (!silent) diagMsg("Pehle footer me backend (worker) URL set karo."); return; }
+    if (!backend) {
+      lastSync = { t: Date.now(), status: 0, error: "backend_not_set" };
+      if (!silent) diagMsg("Pehle footer me backend (worker) URL set karo.");
+      diagRender(); return;
+    }
     var list = pendingEvents();
-    if (!list.length) { if (!silent) diagMsg("Sync ke liye naya event nahi."); return; }
+    if (!list.length) { if (!silent) diagMsg("Sync ke liye naya event nahi."); diagRender(); return; }
     var url = backend.replace(/\/+$/, "") + "/notion";
     if (!silent) diagMsg("Notion par bhej raha hoon… (" + list.length + " events)");
     try {
       var r = await fetch(url, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ events: list }) });
       var d = {};
       try { d = await r.json(); } catch (e) {}
-      if (r.ok && typeof d.created === "number") {
+      var firstErr = (d.errors && d.errors[0]) ? String(d.errors[0]).slice(0, 120) : "";
+      if (r.ok && typeof d.created === "number" && d.created > 0) {
         markSynced(list, d.sent);
-        diagRender();
+        lastSync = { t: Date.now(), status: r.status, created: d.created, failed: d.failed || 0, error: "" };
         if (!silent) diagMsg("Notion: " + d.created + " events save hue" + (d.failed ? (", " + d.failed + " fail") : "") + ".");
       } else if (r.status === 501 || d.error === "notion_not_configured") {
-        if (!silent) diagMsg("Worker me NOTION_TOKEN / NOTION_DB_ID set nahi hai — worker/README.md dekho.");
-      } else if (!silent) {
-        diagMsg("Sync fail: " + (d.error || ("HTTP " + r.status)));
+        lastSync = { t: Date.now(), status: r.status, error: "notion_not_configured" };
+        if (!silent) diagMsg("Worker me NOTION_TOKEN / NOTION_DB_ID set nahi hai (HTTP 501) — worker/README.md dekho.");
+      } else if (r.ok && typeof d.created === "number") {
+        lastSync = { t: Date.now(), status: r.status, created: d.created, failed: d.failed || 0, error: firstErr || "notion_rejected_all" };
+        if (!silent) diagMsg("Notion ne 0 save kiye, " + (d.failed || 0) + " fail — " + (firstErr || "kuch nahi bana") + ". (Database integration ke saath share kiya?)");
+      } else if (d.error === "bad_json" || d.error === "no_events") {
+        lastSync = { t: Date.now(), status: r.status, error: d.error };
+        if (!silent) diagMsg("Sync fail: " + d.error);
+      } else {
+        lastSync = { t: Date.now(), status: r.status, error: d.error || ("HTTP " + r.status) };
+        if (!silent) diagMsg("Sync fail: HTTP " + r.status + " " + (d.error || "") + " — worker par naya worker.js deploy kiya?");
       }
-    } catch (e) { if (!silent) diagMsg("Sync fail: " + ((e && e.message) || e)); }
+    } catch (e) {
+      lastSync = { t: Date.now(), status: 0, error: String((e && e.message) || e).slice(0, 120) };
+      if (!silent) diagMsg("Sync fail: " + ((e && e.message) || e));
+    }
+    diagRender();
   }
   (function () {
     var dOpen = document.getElementById("diagOpen"), dOv = document.getElementById("diagOverlay");
