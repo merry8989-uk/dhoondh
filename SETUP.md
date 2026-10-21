@@ -129,6 +129,20 @@ Do tareeke:
 Phir `opensearch.xml`, `manifest.webmanifest` aur Chrome ke URL me
 `https://merry8989-uk.github.io/dhoondh/` ko apne URL se badal do.
 
+## Diagnostics
+
+Header me **Diagnostics** button hai. Usme device/browser/settings ki info aur app ke logs
+(errors, failed/slow network calls, searches) dikhte hain.
+
+- **Email karo** — `br19shc39@gmail.com` par compose khulta hai, logs pehle se bhare hue (kuch type karne ki zaroorat nahi).
+- **Share** — device ka share sheet.
+- **Copy** — report clipboard me.
+- **Download** — `.txt`, `.json`, `.md`, `.csv` (Excel/Sheets me khulti hai).
+- **Refresh / Clear logs** — log dobara padho ya mita do.
+
+Logs sirf aapke device par (localStorage) rehte hain — Email/Share dabane tak kahin nahi jaate.
+Diagnostics **default ON** hain; toggle se off kar sakte ho.
+
 ## Contact / Feedback
 
 App ke header me **Feedback** button hai (aur footer me bhi contact line) — dono

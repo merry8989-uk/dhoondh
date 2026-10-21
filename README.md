@@ -92,6 +92,20 @@ Deploy it in ~2 minutes (one click) and paste the URL into the **"Web results ba
 field in the footer. Full steps: [`worker/README.md`](worker/README.md). The Worker can use
 the Brave Search API (key), a SearXNG instance, or DuckDuckGo HTML (no key).
 
+## Diagnostics
+
+The header has a **Diagnostics** button. It shows the environment (device, browser, settings)
+and a rolling log of app events, errors and failed/slow network calls.
+
+- **Email** — opens a compose window to `br19shc39@gmail.com` with the report already filled in.
+- **Share** — device share sheet (as a file where supported).
+- **Copy** — copies the report to the clipboard.
+- **Download** — `.txt`, `.json`, `.md`, `.csv` (opens in Excel / Google Sheets).
+- **Refresh / Clear logs** — re-read or wipe the log.
+
+Logs stay on your device only (localStorage) — nothing is sent anywhere unless you press
+Email or Share. Diagnostics are **ON by default** and can be switched off with the toggle.
+
 ## Contact / Feedback
 
 Suggestion, feedback ya naya feature chahiye? Instagram par

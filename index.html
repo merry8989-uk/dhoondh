@@ -62,6 +62,19 @@
   .cfg button:hover{border-color:var(--accent); color:var(--accent)}
   .cfg .msg{color:var(--accent)}
 
+  /* diagnostics panel */
+  .overlay{position:fixed; inset:0; background:rgba(0,0,0,.55); z-index:60;
+    display:flex; align-items:flex-end; justify-content:center}
+  .panel{background:var(--panel); border:1px solid var(--border); border-radius:16px 16px 0 0;
+    width:100%; max-width:880px; max-height:90vh; overflow:auto; padding:18px 18px 28px; box-shadow:var(--shadow)}
+  .panel h2{margin:0 0 6px; font-size:19px}
+  .panel .prow{display:flex; flex-wrap:wrap; gap:8px; align-items:center; margin-top:12px}
+  .panel pre{background:var(--bg); border:1px solid var(--border); border-radius:10px; padding:12px;
+    font-size:11.5px; line-height:1.5; max-height:200px; overflow:auto; white-space:pre-wrap;
+    word-break:break-word; color:var(--muted); margin:0}
+  .panel .sw{display:flex; align-items:center; gap:10px; margin:10px 0 2px; font-size:14px}
+  .panel .sw input{width:18px; height:18px; flex:0 0 18px}
+
   .install{padding:8px 14px; border-radius:10px; border:none; color:#fff; font-weight:600;
     font-size:13px; background:linear-gradient(135deg,var(--accent),var(--accent2));
     cursor:pointer; font-family:inherit; white-space:nowrap}
@@ -153,6 +166,7 @@
 <header>
   <div class="brand"><span class="dot">D</span> Dhoondh <small>apna search engine</small></div>
   <div class="hdr-right">
+    <button id="diagOpen" class="btn ghost" type="button" title="Diagnostics aur logs">Diagnostics</button>
     <a class="btn ghost" href="https://instagram.com/osintgram_io" target="_blank" rel="noopener" title="Suggestion, feedback ya feature request — Instagram @osintgram_io">Feedback</a>
     <button id="install" class="install" hidden>Install app</button>
     <div class="lang"><select id="lang" aria-label="Wikipedia language"></select></div>
@@ -186,6 +200,33 @@
   </div>
   <div class="contact">Suggestion, feedback ya naya feature chahiye? Instagram par <a href="https://instagram.com/osintgram_io" target="_blank" rel="noopener">@osintgram_io</a> par message karo.</div>
 </footer>
+
+<div id="diagOverlay" class="overlay" hidden>
+  <div class="panel" role="dialog" aria-modal="true" aria-label="Diagnostics">
+    <h2>Diagnostics</h2>
+    <div class="sw"><input type="checkbox" id="diagToggle"><label for="diagToggle">Diagnostics ON — logs sirf isi device par store hote hain</label></div>
+    <div class="prow">
+      <button id="diagEmail" class="btn hl" type="button">Email karo</button>
+      <button id="diagShare" class="btn" type="button">Share</button>
+      <button id="diagCopy" class="btn" type="button">Copy</button>
+      <button id="diagRefresh" class="btn" type="button">Refresh</button>
+      <button id="diagClear" class="btn" type="button">Clear logs</button>
+    </div>
+    <div class="prow">
+      <span style="font-size:12.5px;color:var(--muted)">Download:</span>
+      <button class="btn" type="button" data-fmt="txt">.txt</button>
+      <button class="btn" type="button" data-fmt="json">.json</button>
+      <button class="btn" type="button" data-fmt="md">.md</button>
+      <button class="btn" type="button" data-fmt="csv">.csv (Excel)</button>
+    </div>
+    <div id="diagMsg" style="font-size:12.5px;color:var(--accent);margin-top:8px;min-height:16px"></div>
+    <div class="label" style="margin-top:12px">Environment</div>
+    <pre id="diagEnv"></pre>
+    <div class="label" style="margin-top:12px">Logs (<span id="diagCount">0</span>)</div>
+    <pre id="diagLogs"></pre>
+    <div class="prow"><button id="diagClose" class="btn" type="button">Band karo</button></div>
+  </div>
+</div>
 
 <script>
 (function(){
@@ -651,6 +692,7 @@
       b.textContent = t[1];
       b.addEventListener("click", function(){
         tab = t[0];
+        diagLog("tab", t[0]);
         var u = new URL(location.href); u.searchParams.set("tab", tab);
         history.replaceState(null, "", u);
         render();
@@ -1070,6 +1112,166 @@
     return frag;
   }
 
+  // ---------- diagnostics & logs ----------
+  var DIAG_KEY = "dhoondh.diag", LOG_KEY = "dhoondh.logs", APP_VER = "1.0";
+  var diagOn = localStorage.getItem(DIAG_KEY) !== "0";   // ON by default
+  var logs = [];
+  try { logs = JSON.parse(localStorage.getItem(LOG_KEY) || "[]") || []; } catch(e){ logs = []; }
+
+  function shortUrl(u){
+    try { var x = new URL(u, location.href); return (x.host || "") + x.pathname + (x.search ? x.search.slice(0, 80) : ""); }
+    catch(e){ return String(u).slice(0, 120); }
+  }
+  function logsText(){
+    return logs.map(function(l){ return l.t + "  [" + l.level + "]  " + l.msg + (l.data ? "  |  " + l.data : ""); }).join("\n");
+  }
+  function diagLog(level, msg, data){
+    if(!diagOn) return;
+    var entry = { t: new Date().toISOString(), level: level, msg: String(msg == null ? "" : msg).slice(0, 500) };
+    if(data !== undefined){ try { entry.data = JSON.stringify(data).slice(0, 800); } catch(e){} }
+    logs.push(entry);
+    if(logs.length > 300) logs = logs.slice(-300);
+    try { localStorage.setItem(LOG_KEY, JSON.stringify(logs)); } catch(e){}
+    var lg = document.getElementById("diagLogs"); if(lg) lg.textContent = logsText();
+    var c = document.getElementById("diagCount"); if(c) c.textContent = String(logs.length);
+  }
+  function diagEnv(){
+    var standalone = (window.matchMedia && window.matchMedia("(display-mode: standalone)").matches);
+    var keys = "";
+    try { keys = Object.keys(localStorage).filter(function(k){ return k.indexOf("dhoondh") === 0; }).join(", "); } catch(e){}
+    return [
+      "app_version : " + APP_VER,
+      "generated   : " + new Date().toISOString(),
+      "page_url    : " + location.href,
+      "online      : " + navigator.onLine,
+      "display     : " + (standalone ? "standalone (installed)" : "browser"),
+      "service_wkr : " + (("serviceWorker" in navigator) ? "supported" : "no"),
+      "screen      : " + screen.width + "x" + screen.height + " @dpr " + (window.devicePixelRatio || 1),
+      "viewport    : " + window.innerWidth + "x" + window.innerHeight,
+      "language    : " + navigator.language,
+      "wiki_lang   : " + lang,
+      "ai_model    : " + aiModel,
+      "backend     : " + (backend || "(none)"),
+      "timezone    : " + (((Intl.DateTimeFormat().resolvedOptions() || {}).timeZone) || "?"),
+      "platform    : " + (navigator.platform || "-"),
+      "storage_keys: " + (keys || "-"),
+      "user_agent  : " + navigator.userAgent
+    ].join("\n");
+  }
+  function diagReportText(){
+    return "Dhoondh diagnostics\n===================\n\n" + diagEnv() + "\n\nLogs (" + logs.length + ")\n----------------\n" + logsText() + "\n";
+  }
+  function diagReportMD(){
+    return "# Dhoondh diagnostics\n\n_Generated " + new Date().toISOString() + "_\n\n## Environment\n\n```\n" + diagEnv() +
+           "\n```\n\n## Logs (" + logs.length + ")\n\n```\n" + logsText() + "\n```\n";
+  }
+  function diagReportJSON(){
+    return JSON.stringify({ app: "Dhoondh", version: APP_VER, generated: new Date().toISOString(),
+      env: diagEnv().split("\n"), logs: logs }, null, 2);
+  }
+  function diagReportCSV(){
+    var rows = [["time", "level", "message", "data"]];
+    logs.forEach(function(l){ rows.push([l.t, l.level, l.msg, l.data || ""]); });
+    return rows.map(function(r){ return r.map(function(c){ return '"' + String(c).replace(/"/g, '""') + '"'; }).join(","); }).join("\r\n");
+  }
+  function diagMsg(s){ var m = document.getElementById("diagMsg"); if(m) m.textContent = s; }
+  function diagDownload(name, text, mime){
+    try {
+      var blob = new Blob([text], { type: mime + ";charset=utf-8" });
+      var a = document.createElement("a");
+      a.href = URL.createObjectURL(blob); a.download = name;
+      document.body.appendChild(a); a.click();
+      setTimeout(function(){ URL.revokeObjectURL(a.href); a.remove(); }, 800);
+      diagMsg("Download: " + name);
+    } catch(e){ diagMsg("Download fail: " + e.message); }
+  }
+  function diagRender(){
+    var e = document.getElementById("diagEnv"); if(e) e.textContent = diagEnv();
+    var l = document.getElementById("diagLogs"); if(l) l.textContent = logsText();
+    var c = document.getElementById("diagCount"); if(c) c.textContent = String(logs.length);
+    var t = document.getElementById("diagToggle"); if(t) t.checked = diagOn;
+  }
+  function diagEmail(){
+    var body = diagReportText();
+    if(body.length > 5000) body = body.slice(0, 5000) + "\n\n…(baaki logs ke liye file attach karo)";
+    var subject = "Dhoondh diagnostics - " + new Date().toISOString().slice(0, 16).replace("T", " ");
+    location.href = "mailto:br19shc39@gmail.com?subject=" + encodeURIComponent(subject) + "&body=" + encodeURIComponent(body);
+    diagMsg("Email app khul raha hai — logs pehle se bhare hue hain.");
+  }
+  async function diagShare(){
+    var text = diagReportText();
+    var file = null;
+    try { file = new File([text], "dhoondh-diagnostics.txt", { type: "text/plain" }); } catch(e){}
+    try {
+      if(file && navigator.canShare && navigator.canShare({ files: [file] })){
+        await navigator.share({ title: "Dhoondh diagnostics", files: [file] });
+        diagMsg("Share kiya."); return;
+      }
+      if(navigator.share){
+        await navigator.share({ title: "Dhoondh diagnostics", text: text.slice(0, 4000) });
+        diagMsg("Share kiya."); return;
+      }
+    } catch(e){}
+    diagDownload("dhoondh-diagnostics.txt", text, "text/plain");
+  }
+  function diagCopy(){
+    var text = diagReportText();
+    if(navigator.clipboard && navigator.clipboard.writeText){
+      navigator.clipboard.writeText(text).then(function(){ diagMsg("Copy ho gaya."); }, function(){ diagMsg("Copy fail."); });
+    } else { diagMsg("Clipboard support nahi."); }
+  }
+  (function(){
+    var dOpen = document.getElementById("diagOpen"), dOv = document.getElementById("diagOverlay");
+    if(dOpen) dOpen.addEventListener("click", function(){ if(dOv) dOv.hidden = false; diagRender(); });
+    var dClose = document.getElementById("diagClose");
+    if(dClose) dClose.addEventListener("click", function(){ if(dOv) dOv.hidden = true; });
+    if(dOv) dOv.addEventListener("click", function(e){ if(e.target === dOv) dOv.hidden = true; });
+    var dTog = document.getElementById("diagToggle");
+    if(dTog) dTog.addEventListener("change", function(){
+      diagOn = dTog.checked;
+      localStorage.setItem(DIAG_KEY, diagOn ? "1" : "0");
+      diagMsg("Diagnostics " + (diagOn ? "ON" : "OFF"));
+      diagLog("app", "diagnostics " + (diagOn ? "ON" : "OFF"));
+    });
+    var dEm = document.getElementById("diagEmail"); if(dEm) dEm.addEventListener("click", diagEmail);
+    var dSh = document.getElementById("diagShare"); if(dSh) dSh.addEventListener("click", diagShare);
+    var dCp = document.getElementById("diagCopy"); if(dCp) dCp.addEventListener("click", diagCopy);
+    var dRf = document.getElementById("diagRefresh"); if(dRf) dRf.addEventListener("click", function(){ diagRender(); diagMsg("Refresh."); });
+    var dCl = document.getElementById("diagClear");
+    if(dCl) dCl.addEventListener("click", function(){ logs = []; try { localStorage.removeItem(LOG_KEY); } catch(e){} diagRender(); diagMsg("Logs clear."); });
+    Array.prototype.forEach.call(document.querySelectorAll("[data-fmt]"), function(b){
+      b.addEventListener("click", function(){
+        var f = b.getAttribute("data-fmt");
+        if(f === "json") diagDownload("dhoondh-diagnostics.json", diagReportJSON(), "application/json");
+        else if(f === "md") diagDownload("dhoondh-diagnostics.md", diagReportMD(), "text/markdown");
+        else if(f === "csv") diagDownload("dhoondh-diagnostics.csv", diagReportCSV(), "text/csv");
+        else diagDownload("dhoondh-diagnostics.txt", diagReportText(), "text/plain");
+      });
+    });
+  })();
+
+  // capture errors + failed/slow network calls
+  window.addEventListener("error", function(e){ diagLog("error", (e.message || "error") + " @ " + (e.filename || "") + ":" + (e.lineno || "")); });
+  window.addEventListener("unhandledrejection", function(e){ diagLog("error", "promise: " + ((e.reason && e.reason.message) || e.reason)); });
+  (function(){
+    var rf = window.fetch;
+    if(!rf) return;
+    window.fetch = function(input, init){
+      var url = (typeof input === "string") ? input : ((input && input.url) || "");
+      var t0 = Date.now();
+      return rf.apply(this, arguments).then(function(res){
+        var dt = Date.now() - t0;
+        if(!res.ok) diagLog("net", "HTTP " + res.status + "  " + shortUrl(url));
+        else if(dt > 3000) diagLog("net", "slow " + dt + "ms  " + shortUrl(url));
+        return res;
+      }, function(err){
+        diagLog("net", "FAIL  " + shortUrl(url) + "  (" + ((err && err.message) || err) + ")");
+        throw err;
+      });
+    };
+  })();
+  diagLog("app", "start v" + APP_VER + "  tab=" + tab + (q ? "  q=" + q : ""));
+
   // ---------- render ----------
   function addHistory(query){
     try{
@@ -1102,6 +1304,7 @@
     home.hidden = true; tabsEl.hidden = false;
     input.value = q; document.title = q + " — Dhoondh";
     addHistory(q);
+    diagLog("search", q + "  [tab=" + tab + "]");
     buildTabs();
 
     var loading = el("div","status","Dhoondh rahe hain: <b>" + esc(q) + "</b> …");
