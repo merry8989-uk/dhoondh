@@ -134,8 +134,11 @@ Phir `opensearch.xml`, `manifest.webmanifest` aur Chrome ke URL me
 Header me **Diagnostics** button hai. Usme device/browser/settings ki info aur app ke logs
 (errors, failed/slow network calls, searches) dikhte hain.
 
-- **Email karo** — `br19shc39@gmail.com` par compose khulta hai, logs pehle se bhare hue (kuch type karne ki zaroorat nahi).
-- **Share** — device ka share sheet.
+- **Gmail (link)** — Gmail ka compose khulta hai (`br19shc39@gmail.com`, To/Subject/Body bhare hue) **aur log file download ho jaati hai** — bas attach kar do.
+- **Share / Attach** — device ka share sheet; Android par **Gmail** chuno to log file **apne aap attach** ho jaati hai (kuch type karne ki zaroorat nahi).
+- **Email app** — simple `mailto:` compose (koi bhi mail app), report pehle se bhari.
+
+> Seedhi baat: web link se local file attach nahi ho sakti — koi mail client allow nahi karta. Android par **Share / Attach** se automatic attach hota hai; desktop par Gmail button sab bhar deta hai aur file download kar deta hai (bas ek baar drag karo).
 - **Copy** — report clipboard me.
 - **Download** — `.txt`, `.json`, `.md`, `.csv` (Excel/Sheets me khulti hai).
 - **Refresh / Clear logs** — log dobara padho ya mita do.

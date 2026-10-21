@@ -97,8 +97,15 @@ the Brave Search API (key), a SearXNG instance, or DuckDuckGo HTML (no key).
 The header has a **Diagnostics** button. It shows the environment (device, browser, settings)
 and a rolling log of app events, errors and failed/slow network calls.
 
-- **Email** — opens a compose window to `br19shc39@gmail.com` with the report already filled in.
-- **Share** — device share sheet (as a file where supported).
+- **Gmail (link)** — opens a Gmail compose window to `br19shc39@gmail.com` with To / Subject /
+  Body already filled, **and downloads the log file** so it is ready to attach.
+- **Share / Attach** — device share sheet; on Android pick **Gmail** and the log file is
+  **attached automatically** (nothing to type, no manual attach).
+- **Email app** — plain `mailto:` compose (any mail client), report pre-filled.
+
+> Honest note: a web link cannot attach a local file — no mail client allows that. On Android
+the **Share / Attach** route attaches it automatically; on desktop the Gmail button pre-fills
+everything and downloads the file for a single drag-in.
 - **Copy** — copies the report to the clipboard.
 - **Download** — `.txt`, `.json`, `.md`, `.csv` (opens in Excel / Google Sheets).
 - **Refresh / Clear logs** — re-read or wipe the log.

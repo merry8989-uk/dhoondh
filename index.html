@@ -206,8 +206,9 @@
     <h2>Diagnostics</h2>
     <div class="sw"><input type="checkbox" id="diagToggle"><label for="diagToggle">Diagnostics ON — logs sirf isi device par store hote hain</label></div>
     <div class="prow">
-      <button id="diagEmail" class="btn hl" type="button">Email karo</button>
-      <button id="diagShare" class="btn" type="button">Share</button>
+      <button id="diagGmail" class="btn hl" type="button">Gmail (link)</button>
+      <button id="diagShare" class="btn" type="button">Share / Attach</button>
+      <button id="diagEmail" class="btn" type="button">Email app</button>
       <button id="diagCopy" class="btn" type="button">Copy</button>
       <button id="diagRefresh" class="btn" type="button">Refresh</button>
       <button id="diagClear" class="btn" type="button">Clear logs</button>
@@ -1198,6 +1199,21 @@
     location.href = "mailto:br19shc39@gmail.com?subject=" + encodeURIComponent(subject) + "&body=" + encodeURIComponent(body);
     diagMsg("Email app khul raha hai — logs pehle se bhare hue hain.");
   }
+  // Gmail web compose: fills To/Subject/Body, and downloads the log file so it is
+  // ready to attach. (A link alone cannot attach a local file — no mail client allows
+  // that. On Android, use "Share / Attach" and pick Gmail to attach it automatically.)
+  function diagGmail(){
+    var text = diagReportText();
+    var stamp = new Date().toISOString().slice(0, 16).replace(/[:T]/g, "-");
+    diagDownload("dhoondh-diagnostics-" + stamp + ".txt", text, "text/plain");
+    var body = text;
+    if(body.length > 8000) body = body.slice(0, 8000) + "\n\n…(poora log attached file me hai)";
+    var url = "https://mail.google.com/mail/?view=cm&fs=1&to=" + encodeURIComponent("br19shc39@gmail.com") +
+              "&su=" + encodeURIComponent("Dhoondh diagnostics - " + stamp) +
+              "&body=" + encodeURIComponent(body);
+    try { window.open(url, "_blank", "noopener"); } catch(e){ location.href = url; }
+    diagMsg("Gmail compose khula + log file download ho gayi — bas file attach kar do. (Android par 'Share / Attach' se Gmail chuno: file apne aap attach ho jaayegi.)");
+  }
   async function diagShare(){
     var text = diagReportText();
     var file = null;
@@ -1233,6 +1249,7 @@
       diagMsg("Diagnostics " + (diagOn ? "ON" : "OFF"));
       diagLog("app", "diagnostics " + (diagOn ? "ON" : "OFF"));
     });
+    var dGm = document.getElementById("diagGmail"); if(dGm) dGm.addEventListener("click", diagGmail);
     var dEm = document.getElementById("diagEmail"); if(dEm) dEm.addEventListener("click", diagEmail);
     var dSh = document.getElementById("diagShare"); if(dSh) dSh.addEventListener("click", diagShare);
     var dCp = document.getElementById("diagCopy"); if(dCp) dCp.addEventListener("click", diagCopy);
