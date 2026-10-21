@@ -180,6 +180,11 @@ rest, centrally enforced retention, aur session replay.
 - **Notion** — events schema ek Notion database ("Dhoondh Diagnostics — Events") se match karta hai,
   jisme ready views hain: All events, Errors, Warnings, Friction signals, By user code. App ka
   `.csv` export usme import kar do.
+- **Notion sync** — panel me **Sync to Notion** (manual) aur **Auto-sync** checkbox (background,
+  default OFF) hai. Dono unsynced events ko aapke Worker ke `/notion` route par bhejte hain, jo
+  unhe database me likh deta hai. Event sirf successful reply ke baad synced mark hota hai — kuch
+  khota ya duplicate nahi hota. Ek-baar ka setup (Notion integration token + database share,
+  Worker variables `NOTION_TOKEN` aur `NOTION_DB_ID`) `worker/README.md` me hai.
 
 ## Contact / Feedback
 

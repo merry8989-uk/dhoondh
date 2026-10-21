@@ -80,3 +80,36 @@ Open `https://<your-worker>/?q=ISRO`. You should get JSON:
 Scraping DuckDuckGo's HTML is fine for light personal use but is a grey area and can be
 rate-limited. For anything serious, use the Brave API or a self-hosted SearXNG. Dhoondh
 only ever calls *your* Worker.
+
+## Notion diagnostics sync (optional)
+
+`worker.js` also exposes **`POST /notion`** — it takes `{ "events": [...] }` and writes each
+event into a Notion database as a row. The Dhoondh app's Diagnostics panel has a
+**Sync to Notion** button (and an **Auto-sync** checkbox) that calls it. The Notion token
+lives only in the Worker, so the browser never sees it.
+
+### One-time setup
+
+1. **Create a Notion integration** — open <https://www.notion.so/my-integrations>, "New
+   integration", name it, and copy the **Internal Integration Secret** (`ntn_...`).
+2. **Share the database with it** — open the "Dhoondh Diagnostics — Events" database in
+   Notion, `...` menu -> **Connections** -> add your integration. Without this the API
+   returns 404 for every write.
+3. **Set the Worker variables** — Cloudflare dashboard -> your Worker -> Settings ->
+   Variables and Secrets:
+   - `NOTION_TOKEN` — the integration secret (mark it **Secret** / encrypted)
+   - `NOTION_DB_ID` — `f48646430c4f46fbadee0972a74fc2db`
+4. **Deploy** `worker.js` again.
+5. In the app: footer backend URL = your Worker URL -> Diagnostics -> **Sync to Notion**.
+
+### What it returns
+
+```json
+{ "ok": true, "received": 12, "sent": 12, "created": 12, "failed": 0, "truncated": false, "errors": [] }
+```
+
+- Up to **40 events per request** (Notion allows ~3 requests/sec, so the Worker paces itself).
+- If the token is missing it answers `501 { "error": "notion_not_configured" }` and the app
+  shows a friendly hint instead of failing silently.
+- Events are only marked synced after a successful response, so nothing is lost and nothing
+  is duplicated.

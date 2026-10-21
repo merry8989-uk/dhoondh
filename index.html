@@ -235,6 +235,8 @@
       <button id="diagCopy" class="btn" type="button">Copy</button>
       <button id="diagRefresh" class="btn" type="button">Refresh</button>
       <button id="diagClear" class="btn" type="button">Clear logs</button>
+      <button id="diagNotion" class="btn" type="button">Sync to Notion</button>
+      <label style="display:flex;align-items:center;gap:6px;font-size:12.5px;color:var(--muted)"><input type="checkbox" id="diagAutoNotion"> Auto-sync</label>
     </div>
     <div class="prow">
       <span style="font-size:12.5px;color:var(--muted)">Download:</span>
@@ -1203,6 +1205,10 @@
   }
   var USER_CODE = makeUserCode();
 
+  // auto-sync to Notion (off by default — needs the Worker token set up)
+  var AUTO_KEY = "dhoondh.autonotion";
+  var autoNotion = localStorage.getItem(AUTO_KEY) === "1";
+
   // ---- log filters (level / event / free text) ----
   var FILTER = { level: "", event: "", text: "" };
   function filteredEvents(){
@@ -1350,7 +1356,7 @@
     var l = document.getElementById("diagLogs"); if (l) l.textContent = logsText();
     var n = filteredEvents().length;
     var c = document.getElementById("diagCount"); if (c) c.textContent = n + " / " + events.length;
-    var fc = document.getElementById("diagFCount"); if (fc) fc.textContent = n + " of " + events.length + " shown";
+    var fc = document.getElementById("diagFCount"); if (fc) fc.textContent = n + " of " + events.length + " shown · " + pendingEvents().length + " not synced";
     var code = document.getElementById("diagCode"); if (code) code.textContent = USER_CODE;
     var t = document.getElementById("diagToggle"); if (t) t.checked = diagOn;
     refreshEventOptions();
@@ -1391,6 +1397,35 @@
       navigator.clipboard.writeText(text).then(function () { diagMsg("Copy ho gaya."); }, function () { diagMsg("Copy fail."); });
     } else { diagMsg("Clipboard support nahi."); }
   }
+  function pendingEvents(){ return events.filter(function (e) { return !e.synced; }); }
+  function markSynced(list, sent){
+    var n = (typeof sent === "number") ? sent : list.length;
+    list.slice(0, n).forEach(function (e) { e.synced = true; });
+    try { localStorage.setItem(LOG_KEY, JSON.stringify(events)); } catch (e) {}
+  }
+  // Send events that have not been synced yet to the Worker's /notion route, which writes
+  // them into the Notion database. The Notion token lives only in the Worker.
+  async function syncNotion(silent){
+    if (!backend) { if (!silent) diagMsg("Pehle footer me backend (worker) URL set karo."); return; }
+    var list = pendingEvents();
+    if (!list.length) { if (!silent) diagMsg("Sync ke liye naya event nahi."); return; }
+    var url = backend.replace(/\/+$/, "") + "/notion";
+    if (!silent) diagMsg("Notion par bhej raha hoon… (" + list.length + " events)");
+    try {
+      var r = await fetch(url, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ events: list }) });
+      var d = {};
+      try { d = await r.json(); } catch (e) {}
+      if (r.ok && typeof d.created === "number") {
+        markSynced(list, d.sent);
+        diagRender();
+        if (!silent) diagMsg("Notion: " + d.created + " events save hue" + (d.failed ? (", " + d.failed + " fail") : "") + ".");
+      } else if (r.status === 501 || d.error === "notion_not_configured") {
+        if (!silent) diagMsg("Worker me NOTION_TOKEN / NOTION_DB_ID set nahi hai — worker/README.md dekho.");
+      } else if (!silent) {
+        diagMsg("Sync fail: " + (d.error || ("HTTP " + r.status)));
+      }
+    } catch (e) { if (!silent) diagMsg("Sync fail: " + ((e && e.message) || e)); }
+  }
   (function () {
     var dOpen = document.getElementById("diagOpen"), dOv = document.getElementById("diagOverlay");
     if (dOpen) dOpen.addEventListener("click", function () { if (dOv) dOv.hidden = false; diagRender(); });
@@ -1409,6 +1444,16 @@
     var dSh = document.getElementById("diagShare"); if (dSh) dSh.addEventListener("click", diagShare);
     var dCp = document.getElementById("diagCopy"); if (dCp) dCp.addEventListener("click", diagCopy);
     var dRf = document.getElementById("diagRefresh"); if (dRf) dRf.addEventListener("click", function () { diagRender(); diagMsg("Refresh."); });
+    var dNo = document.getElementById("diagNotion"); if (dNo) dNo.addEventListener("click", function () { syncNotion(false); });
+    var dAn = document.getElementById("diagAutoNotion");
+    if (dAn) {
+      dAn.checked = autoNotion;
+      dAn.addEventListener("change", function () {
+        autoNotion = dAn.checked;
+        localStorage.setItem(AUTO_KEY, autoNotion ? "1" : "0");
+        diagMsg("Auto-sync " + (autoNotion ? "ON" : "OFF"));
+      });
+    }
     var fl = document.getElementById("diagFLevel"), fe = document.getElementById("diagFEvent"), ft = document.getElementById("diagFText");
     function applyFilter(){
       FILTER.level = (fl && fl.value) || "";
@@ -1601,6 +1646,7 @@
     }
     results.innerHTML = "";
     results.appendChild(node);
+    if (autoNotion) syncNotion(true);   // background sync, only when auto-sync is ON
   }
 
   document.addEventListener("keydown", function(e){

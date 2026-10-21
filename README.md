@@ -151,6 +151,11 @@ encryption at rest, centrally enforced retention, and session replay.
 - **Notion** — the events schema mirrors a Notion database ("Dhoondh Diagnostics — Events") with
   ready-made views: All events, Errors, Warnings, Friction signals, By user code. Import the
   app's `.csv` export into it.
+- **Notion sync** — the panel also has **Sync to Notion** (manual) and an **Auto-sync** checkbox
+  (background, off by default). Both POST unsynced events to your Worker's `/notion` route,
+  which writes them into the database. Events are marked synced only after a successful reply,
+  so nothing is lost or duplicated. One-time setup (Notion integration token + database shared
+  with it, set as Worker variables `NOTION_TOKEN` and `NOTION_DB_ID`) is in `worker/README.md`.
 
 ## Contact / Feedback
 
