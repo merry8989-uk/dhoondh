@@ -333,7 +333,7 @@
   function webResults(){
     if(!backend) return Promise.resolve(null);
     var u = backendQuery(backend, q);
-    return fetch(u).then(function(r){
+    return fetchT(u, {}, 7000).then(function(r){
       return r.text().then(function(t){
         var j = null; try { j = JSON.parse(t); } catch(e){}
         if(!j) return { results: [], error: "HTTP " + r.status + " — JSON nahi mila", url: u };
@@ -341,7 +341,8 @@
         return j;
       });
     }).catch(function(e){
-      return { results: [], error: "fetch fail (" + e.message + ")", url: u };
+      var m = (e && e.name === "AbortError") ? "timeout 7s" : ((e && e.message) || e);
+      return { results: [], error: "fetch fail (" + m + ")", url: u };
     });
   }
 
@@ -432,53 +433,88 @@
     return out;
   }
   // Multi-source web search through public CORS proxies, merged + de-duplicated.
-  async function proxySearch(query){
-    var qs = encodeURIComponent(query);
-    var targets = [
-      ["bing", "https://www.bing.com/search?q=" + qs + "&count=20", "bing"],
-      ["duckduckgo", "https://html.duckduckgo.com/html/?q=" + qs, "ddg"],
-      ["duckduckgo", "https://lite.duckduckgo.com/lite/?q=" + qs, "lite"]
-    ];
-    var merged = [];
-    for(var t = 0; t < targets.length; t++){
-      var target = targets[t][1], kind = targets[t][2];
-      var urls = proxyList(target);
-      for(var i = 0; i < urls.length; i++){
-        try{
-          var r = await fetch(urls[i]);
-          if(!r.ok) continue;
-          var html = await r.text();
-          var res = kind === "ddg" ? parseDDG(html) : kind === "lite" ? parseLite(html) : parseBing(html);
-          res = dedupe(res);
-          if(res.length){ merged = merged.concat(res); break; }
-        }catch(e){}
-      }
-      if(merged.length >= 8) break;
-    }
-    merged = dedupe(merged).slice(0, 20);
-    if(!merged.length) return null;
-    return { source: "web", results: merged };
+  // ---- network helpers ----------------------------------------------------------
+  // Every attempt has a HARD timeout, and fallbacks run in PARALLEL. The old code went
+  // through three proxies one after another with no cap, so a dead proxy could hang a
+  // search for ~20s (real logs showed 17-20s stalls, three in a row).
+  function fetchT(url, opts, ms){
+    var ctl = (typeof AbortController !== "undefined") ? new AbortController() : null;
+    var timer = setTimeout(function(){ if(ctl){ try{ ctl.abort(); }catch(e){} } }, ms || 8000);
+    var o = {};
+    if(opts){ for(var k in opts){ if(opts.hasOwnProperty(k)) o[k] = opts[k]; } }
+    if(ctl) o.signal = ctl.signal;
+    return fetch(url, o).then(function(r){ clearTimeout(timer); return r; },
+                              function(e){ clearTimeout(timer); throw e; });
   }
-
-  // ---- generic fetch that works with or without CORS (direct, then proxies) ----
+  // Fire several URLs at once; resolve with the first one that returns usable data.
+  async function raceFetch(urls, asText, ms){
+    var out = null;
+    if(!urls || !urls.length) return null;
+    await new Promise(function(resolve){
+      var pending = urls.length, settled = false;
+      function finish(v){ if(settled) return; settled = true; out = v; resolve(); }
+      urls.forEach(function(u){
+        fetchT(u, {}, ms || 8000)
+          .then(function(r){ if(!r.ok) throw new Error("HTTP " + r.status); return asText ? r.text() : r.json(); })
+          .then(function(v){ if(v != null) finish(v); })
+          .catch(function(){})
+          .then(function(){ if(--pending <= 0) finish(null); });
+      });
+    });
+    return out;
+  }
   function proxyList(url){
+    var e = encodeURIComponent(url);
     return [
-      "https://api.allorigins.win/raw?url=" + encodeURIComponent(url),
-      "https://corsproxy.io/?url=" + encodeURIComponent(url),
-      "https://api.codetabs.com/v1/proxy?quest=" + encodeURIComponent(url)
+      "https://api.allorigins.win/raw?url=" + e,
+      "https://api.codetabs.com/v1/proxy?quest=" + e,
+      "https://api.cors.lol/?url=" + e
     ];
   }
+  // Direct first (CORS-friendly APIs answer in ms), then the proxies raced together.
+  // Direct first with a short cap (a CORS block rejects instantly, so this is usually
+  // free), then the proxies raced together — keeps a tab from waiting ~12s.
   async function fetchAny(url){
-    try { var r = await fetch(url); if(r.ok) return await r.json(); } catch(e){}
-    var ps = proxyList(url);
-    for(var i=0;i<ps.length;i++){ try { var r2 = await fetch(ps[i]); if(r2.ok) return await r2.json(); } catch(e){} }
-    return null;
+    var direct = await raceFetch([url], false, 2500);
+    if(direct != null) return direct;
+    return await raceFetch(proxyList(url), false, 6000);
   }
   async function fetchAnyText(url){
-    try { var r = await fetch(url); if(r.ok) return await r.text(); } catch(e){}
-    var ps = proxyList(url);
-    for(var i=0;i<ps.length;i++){ try { var r2 = await fetch(ps[i]); if(r2.ok) return await r2.text(); } catch(e){} }
-    return null;
+    var direct = await raceFetch([url], true, 2500);
+    if(direct != null) return direct;
+    return await raceFetch(proxyList(url), true, 6000);
+  }
+
+  // Web results through public CORS proxies: all jobs in parallel, first non-empty wins.
+  async function proxySearch(query){
+    var qs = encodeURIComponent(query);
+    var jobs = [];
+    [["https://www.bing.com/search?q=" + qs + "&count=20", "bing"],
+     ["https://html.duckduckgo.com/html/?q=" + qs, "ddg"],
+     ["https://lite.duckduckgo.com/lite/?q=" + qs, "lite"]].forEach(function(t){
+      proxyList(t[0]).forEach(function(u){ jobs.push({ u: u, kind: t[1] }); });
+    });
+    var found = null;
+    await new Promise(function(resolve){
+      var pending = jobs.length, settled = false;
+      function finish(v){ if(settled) return; settled = true; found = v; resolve(); }
+      jobs.forEach(function(j){
+        fetchT(j.u, {}, 8000)
+          .then(function(r){ return r.ok ? r.text() : ""; })
+          .then(function(html){
+            if(settled || !html) return;
+            var res = j.kind === "ddg" ? parseDDG(html) : j.kind === "lite" ? parseLite(html) : parseBing(html);
+            res = dedupe(res);
+            if(res.length) finish({ source: "web", results: res });
+          })
+          .catch(function(){})
+          .then(function(){ if(--pending <= 0) finish(null); });
+      });
+      if(!jobs.length) finish(null);
+    });
+    if(!found) return null;
+    found.results = dedupe(found.results).slice(0, 20);
+    return found.results.length ? found : null;
   }
 
   // ---- open connectors: research / open data / OSINT ----
@@ -487,7 +523,8 @@
   function arxiv(q){ return fetchAnyText("https://export.arxiv.org/api/query?search_query=all:" + enc(q) + "&max_results=6").then(function(x){ return parseArxiv(x || ""); }); }
   function zenodo(q){ return fetchAny("https://zenodo.org/api/records?size=6&q=" + enc(q)).then(function(d){ return (d && d.hits && d.hits.hits) || []; }); }
   function gdelt(q){ return fetchAny("https://api.gdeltproject.org/api/v2/doc/doc?mode=artlist&maxrecords=8&format=json&query=" + enc(q)).then(function(d){ return (d && d.articles) || []; }); }
-  function wikidata(q){ return fetchAny("https://www.wikidata.org/w/api.php?action=wbsearchentities&language=en&format=json&limit=8&search=" + enc(q)).then(function(d){ return (d && d.search) || []; }); }
+  // origin=* is required or Wikidata's API is blocked by CORS (it was failing in the logs)
+  function wikidata(q){ return fetchAny("https://www.wikidata.org/w/api.php?action=wbsearchentities&language=en&format=json&limit=8&origin=*&search=" + enc(q)).then(function(d){ return (d && d.search) || []; }); }
   function gleif(q){ return fetchAny("https://api.gleif.org/api/v1/lei-records?page%5Bsize%5D=6&filter%5Bfulltext%5D=" + enc(q)).then(function(d){ return (d && d.data) || []; }); }
   function wayback(q){
     var d0 = q.replace(/^https?:\/\//i, "").replace(/\/.*$/, "");
@@ -885,7 +922,6 @@
   function webSetupCard(web){
     var card = el("div","card answer");
     var set = !!backend;
-    track("error_state_shown", "warn", { error_code: (web && web.error) ? "backend_fetch_failed" : (web && web.blocked ? "source_blocked" : "web_results_unavailable"), screen: routeName(), message_key: set ? "web_results_failed" : "backend_not_configured" });
     card.appendChild(el("h3", null, set ? "Web results nahi aaye" : "Web results ke liye free backend lagao"));
     var msg;
     if(set && web && web.error){
@@ -990,35 +1026,75 @@
     return frag;
   }
 
+  // Web results load in the background into this slot, so a slow or dead source can
+  // never block the content below it (the logs showed the old order hanging the whole
+  // page for ~60s and the Wikipedia section never even running).
+  function fillWeb(slot, note){
+    var timer = setTimeout(function(){
+      note.textContent = "Web results abhi nahi aaye — neeche Wikipedia / Internet Archive se kaam chalao.";
+    }, 9000);
+    (async function(){
+      // start both at once — awaiting them one after another could cost 7s + 8s
+      var wp = webResults();
+      var pp = proxySearch(q);
+      var web = null;
+      try { web = await wp; } catch(e){}
+      if(!(web && web.results && web.results.length)){
+        try { var prox = await pp; if(prox) web = prox; } catch(e){}
+      }
+      clearTimeout(timer);
+      var hasWeb = !!(web && web.results && web.results.length);
+      ATTEMPT = "att_" + Math.random().toString(36).slice(2, 8);
+      if(hasWeb){
+        track("search_performed", "info", { query_length: q.length, result_count: web.results.length, tab: tab });
+        if(!FIRST_VALUE){ FIRST_VALUE = Date.now(); track("time_to_first_value", "info", { flow: "session_start_to_first_search", duration_ms: FIRST_VALUE - SESSION_START }); }
+      } else {
+        track("search_no_results", "warn", { query_length: q.length, tab: tab });
+        track("error_state_shown", "warn", { error_code: (backend ? "backend_fetch_failed" : "no_backend"), screen: routeName(), message_key: "web_results_unavailable" });
+      }
+      slot.innerHTML = "";
+      slot.appendChild(label(hasWeb ? ("Web results · " + web.results.length) : "Web results"));
+      if(hasWeb){
+        if(web.results.length >= 3){
+          var sc = el("div","card answer");
+          sc.appendChild(el("h3", null, "AI summary"));
+          var sbody = el("p","extract","Soch raha hoon…");
+          sc.appendChild(sbody);
+          slot.appendChild(sc);
+          aiSummary(q, web.results).then(function(t){ sbody.textContent = t || "AI summary abhi nahi mila."; });
+        }
+        slot.appendChild(webList(web.results));
+      } else {
+        slot.appendChild(backend ? webFailNote(web) : webSetupCard(web));
+      }
+    })();
+  }
+
+  // Compact, actionable note — the old full-size card was a dead end (users tapped its
+  // heading 4 times in the logs).
+  function webFailNote(web){
+    var wrap = el("div","card");
+    wrap.appendChild(el("p","extract","Web results nahi aaye" + ((web && web.error) ? (" — " + web.error) : "") + "."));
+    wrap.appendChild(el("p","note","Neeche Wikipedia, Internet Archive aur Commons ke results already aa gaye hain — unse kaam chalao. Backend theek karke poore web results bhi aa jaayenge."));
+    var a = el("a","btn","Backend setup →");
+    a.href = "https://github.com/merry8989-uk/dhoondh/tree/main/worker";
+    a.target = "_blank"; a.rel = "noopener";
+    a.style.display = "inline-block"; a.style.marginTop = "10px";
+    wrap.appendChild(a);
+    return wrap;
+  }
+
   async function tabAll(){
     var frag = document.createDocumentFragment();
-    var web = await webResults();
-    if(!(web && web.results && web.results.length)){
-      var prox = await proxySearch(q);
-      if(prox) web = prox;
-    }
-    var hasWeb = !!(web && web.results && web.results.length);
-    ATTEMPT = "att_" + Math.random().toString(36).slice(2, 8);
-    if(hasWeb){
-      track("search_performed", "info", { query_length: q.length, result_count: web.results.length, tab: tab });
-      if(!FIRST_VALUE){ FIRST_VALUE = Date.now(); track("time_to_first_value", "info", { flow: "session_start_to_first_search", duration_ms: FIRST_VALUE - SESSION_START }); }
-    } else {
-      track("search_no_results", "warn", { query_length: q.length, tab: tab });
-    }
-    frag.appendChild(label(hasWeb ? ("Web results · " + web.results.length) : "Web results"));
-    if(hasWeb){
-      if(web.results.length >= 3){
-        var sc = el("div","card answer");
-        sc.appendChild(el("h3", null, "AI summary"));
-        var sbody = el("p","extract","Soch raha hoon…");
-        sc.appendChild(sbody);
-        frag.appendChild(sc);
-        aiSummary(q, web.results).then(function(t){ sbody.textContent = t || "AI summary abhi nahi mila."; });
-      }
-      frag.appendChild(webList(web.results));
-    } else {
-      frag.appendChild(webSetupCard(web));
-    }
+
+    // 1) slot at the top, filled asynchronously
+    var webSlot = el("div");
+    webSlot.appendChild(label("Web results"));
+    var webNote = el("p","note","Web results laa rahe hain…");
+    webSlot.appendChild(webNote);
+    frag.appendChild(webSlot);
+
+    // 2) fast, reliable sources render immediately
     var hits = await wikiSearch(q).catch(function(){ return []; });
     if(hits.length){
       var top = hits.slice(0,7);
@@ -1030,6 +1106,10 @@
       top.forEach(function(h,i){ if(i === ansIdx) return; wrap.appendChild(resultRow(h, sums[i])); });
       if(wrap.childNodes.length){ frag.appendChild(label("Wikipedia")); frag.appendChild(wrap); }
     }
+
+    // 3) web results in the background (never blocks)
+    fillWeb(webSlot, webNote);
+
     frag.appendChild(label("Aur engines par search karo"));
     frag.appendChild(linkButtons(LINKS.all));
     return frag;
