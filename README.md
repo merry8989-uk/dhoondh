@@ -16,8 +16,8 @@ Live site: **https://merry8989-uk.github.io/dhoondh/**
 | **Videos** | Real videos from the Internet Archive + YouTube, Google Videos, Vimeo, Dailymotion |
 | **YouTube** | YouTube, YouTube Music, Shorts, latest uploads |
 | **Papers** | Live results from **Crossref, OpenAlex, arXiv** + Google Scholar, Semantic Scholar, PubMed, CORE, ResearchGate, SSRN |
-| **Data** | Live results from **Zenodo, GDELT, Wikidata** + Google Dataset Search, data.gov.in, data.gov, World Bank, UN Data, OpenStreetMap |
-| **OSINT** | Live results from **GDELT, Wikidata, GLEIF, Wayback** + crt.sh, urlscan.io, Shodan, OpenCorporates, OpenSanctions, GitHub |
+| **Data** | Live results from **Zenodo, Wikidata, Internet Archive** + Google Dataset Search, data.gov.in, data.gov, World Bank, UN Data, OpenStreetMap |
+| **OSINT** | Live results from **Wikidata, GLEIF, Wayback** + crt.sh, urlscan.io, Shodan, OpenCorporates, OpenSanctions, GitHub |
 | **Books / EPUB** | Real books (EPUB/PDF) from the Internet Archive + Project Gutenberg, Open Library, Standard Ebooks, Google Books |
 | **PDF** | Real PDFs from the Internet Archive + `filetype:pdf` searches on Google/Bing/Scholar |
 | **PPT** | `filetype:ppt/pptx` searches + SlideShare + Internet Archive |

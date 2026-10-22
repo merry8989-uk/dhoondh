@@ -522,7 +522,6 @@
   function openalex(q){ return fetchAny("https://api.openalex.org/works?per-page=6&search=" + enc(q)).then(function(d){ return (d && d.results) || []; }); }
   function arxiv(q){ return fetchAnyText("https://export.arxiv.org/api/query?search_query=all:" + enc(q) + "&max_results=6").then(function(x){ return parseArxiv(x || ""); }); }
   function zenodo(q){ return fetchAny("https://zenodo.org/api/records?size=6&q=" + enc(q)).then(function(d){ return (d && d.hits && d.hits.hits) || []; }); }
-  function gdelt(q){ return fetchAny("https://api.gdeltproject.org/api/v2/doc/doc?mode=artlist&maxrecords=8&format=json&query=" + enc(q)).then(function(d){ return (d && d.articles) || []; }); }
   // origin=* is required or Wikidata's API is blocked by CORS (it was failing in the logs)
   function wikidata(q){ return fetchAny("https://www.wikidata.org/w/api.php?action=wbsearchentities&language=en&format=json&limit=8&origin=*&search=" + enc(q)).then(function(d){ return (d && d.search) || []; }); }
   function gleif(q){ return fetchAny("https://api.gleif.org/api/v1/lei-records?page%5Bsize%5D=6&filter%5Bfulltext%5D=" + enc(q)).then(function(d){ return (d && d.data) || []; }); }
@@ -777,13 +776,13 @@
 
   // ---------- data sources ----------
   function wikiSearch(query){
-    return fetch("https://" + lang + ".wikipedia.org/w/api.php?action=query&list=search&srsearch=" + enc(query) +
-      "&format=json&origin=*&srlimit=8")
+    return fetchT("https://" + lang + ".wikipedia.org/w/api.php?action=query&list=search&srsearch=" + enc(query) +
+      "&format=json&origin=*&srlimit=8", {}, 6000)
       .then(function(r){ return r.json(); })
       .then(function(d){ return (d.query && d.query.search) ? d.query.search : []; });
   }
   function wikiSummary(title){
-    return fetch("https://" + lang + ".wikipedia.org/api/rest_v1/page/summary/" + enc(title))
+    return fetchT("https://" + lang + ".wikipedia.org/api/rest_v1/page/summary/" + enc(title), {}, 5000)
       .then(function(r){ return r.ok ? r.json() : null; }).catch(function(){ return null; });
   }
   function pageURL(title){
@@ -794,14 +793,14 @@
     var url = "https://archive.org/advancedsearch.php?q=" + enc(q2) +
       "&fl[]=identifier&fl[]=title&fl[]=creator&fl[]=year&fl[]=mediatype" +
       "&rows=12&page=1&sort[]=downloads desc&output=json";
-    return fetch(url).then(function(r){ return r.json(); })
+    return fetchT(url, {}, 6000).then(function(r){ return r.json(); })
       .then(function(d){ return (d.response && d.response.docs) ? d.response.docs : []; })
       .catch(function(){ return []; });
   }
   function commonsSearch(query){
     var url = "https://commons.wikimedia.org/w/api.php?action=query&generator=search&gsrsearch=" + enc(query) +
       "&gsrnamespace=6&gsrlimit=12&prop=imageinfo&iiprop=url&iiurlwidth=240&format=json&origin=*";
-    return fetch(url).then(function(r){ return r.json(); })
+    return fetchT(url, {}, 6000).then(function(r){ return r.json(); })
       .then(function(d){
         if(!d.query || !d.query.pages) return [];
         return Object.keys(d.query.pages).map(function(k){ return d.query.pages[k]; })
@@ -977,20 +976,23 @@
 
   async function tabData(){
     var frag = document.createDocumentFragment();
-    frag.appendChild(el("p","note","Live results: Zenodo · GDELT · Wikidata"));
+    // GDELT was dropped: it sends no CORS headers, so it failed 0/2 in the real logs
+    // and only added ~8s of waiting. Internet Archive is CORS-friendly and always answers.
+    frag.appendChild(el("p","note","Live results: Zenodo · Wikidata · Internet Archive"));
     var out = await Promise.all([
       zenodo(q).catch(function(){ return []; }),
-      gdelt(q).catch(function(){ return []; }),
-      wikidata(q).catch(function(){ return []; })
+      wikidata(q).catch(function(){ return []; }),
+      iaSearch(q, "").catch(function(){ return []; })
     ]);
     frag.appendChild(sectionList("Zenodo (open research data)", out[0], function(it){
       return { title: it.metadata && it.metadata.title, url: (it.links && (it.links.self_html || it.links.self)) || "", meta: "Zenodo" + (it.metadata && it.metadata.resource_type ? " · " + it.metadata.resource_type.title : "") };
     }));
-    frag.appendChild(sectionList("GDELT (news & events)", out[1], function(it){
-      return { title: it.title, url: it.url, meta: [it.domain, it.seendate ? String(it.seendate).slice(0, 8) : ""].filter(Boolean).join(" · ") };
-    }));
-    frag.appendChild(sectionList("Wikidata (structured open data)", out[2], function(it){
+    frag.appendChild(sectionList("Wikidata (structured open data)", out[1], function(it){
       return { title: it.label, url: it.concepturi, snippet: it.description };
+    }));
+    frag.appendChild(sectionList("Internet Archive (open collections)", (out[2] || []).slice(0, 6), function(it){
+      var cr = it.creator ? (Array.isArray(it.creator) ? it.creator[0] : it.creator) : "";
+      return { title: it.title || it.identifier, url: "https://archive.org/details/" + enc(it.identifier), meta: [cr, it.year, it.mediatype].filter(Boolean).join(" · ") };
     }));
     frag.appendChild(label("Open data portals"));
     frag.appendChild(linkButtons(LINKS.data));
@@ -999,26 +1001,22 @@
 
   async function tabOSINT(){
     var frag = document.createDocumentFragment();
-    frag.appendChild(el("p","note","Live results: GDELT · Wikidata · GLEIF · Wayback"));
+    frag.appendChild(el("p","note","Live results: Wikidata · GLEIF · Wayback"));
     var out = await Promise.all([
-      gdelt(q).catch(function(){ return []; }),
       wikidata(q).catch(function(){ return []; }),
       gleif(q).catch(function(){ return []; }),
       wayback(q).catch(function(){ return []; })
     ]);
-    frag.appendChild(sectionList("GDELT (news mentions)", out[0], function(it){
-      return { title: it.title, url: it.url, meta: [it.domain, it.language].filter(Boolean).join(" · ") };
-    }));
-    frag.appendChild(sectionList("Wikidata (entities)", out[1], function(it){
+    frag.appendChild(sectionList("Wikidata (entities)", out[0], function(it){
       return { title: it.label, url: it.concepturi, snippet: it.description };
     }));
-    frag.appendChild(sectionList("GLEIF (legal entities)", out[2], function(it){
+    frag.appendChild(sectionList("GLEIF (legal entities)", out[1], function(it){
       var e = (it.attributes && it.attributes.entity) || {};
       var name = e.legalName && e.legalName.name;
       var ctry = e.legalAddress && e.legalAddress.country;
       return { title: name, url: "https://search.gleif.org/#/record/" + it.id, meta: ["LEI " + it.id, ctry].filter(Boolean).join(" · ") };
     }));
-    frag.appendChild(sectionList("Wayback Machine (archived captures)", out[3], function(it){
+    frag.appendChild(sectionList("Wayback Machine (archived captures)", out[2], function(it){
       return { title: (it[2] || "") + " — " + (it[1] || ""), url: "https://web.archive.org/web/" + it[1] + "/" + it[2], meta: it[4] || "" };
     }));
     frag.appendChild(label("OSINT tools"));
@@ -1030,6 +1028,7 @@
   // never block the content below it (the logs showed the old order hanging the whole
   // page for ~60s and the Wikipedia section never even running).
   function fillWeb(slot, note){
+    var t0 = Date.now();
     var timer = setTimeout(function(){
       note.textContent = "Web results abhi nahi aaye — neeche Wikipedia / Internet Archive se kaam chalao.";
     }, 9000);
@@ -1053,7 +1052,8 @@
         track("error_state_shown", "warn", { error_code: (backend ? "backend_fetch_failed" : "no_backend"), screen: routeName(), message_key: "web_results_unavailable" });
       }
       slot.innerHTML = "";
-      slot.appendChild(label(hasWeb ? ("Web results · " + web.results.length) : "Web results"));
+      var secs = ((Date.now() - t0) / 1000).toFixed(1);
+      slot.appendChild(label(hasWeb ? ("Web results · " + web.results.length + " · " + secs + "s") : "Web results"));
       if(hasWeb){
         if(web.results.length >= 3){
           var sc = el("div","card answer");
@@ -1098,13 +1098,22 @@
     var hits = await wikiSearch(q).catch(function(){ return []; });
     if(hits.length){
       var top = hits.slice(0,7);
-      var sums = await Promise.all(top.map(function(h){ return wikiSummary(h.title); }));
+      // only the first few need a summary (for the answer card + snippets); the rest render
+      // as plain rows immediately, so fewer round-trips and a faster first paint
+      var sums = await Promise.all(top.slice(0,4).map(function(h){ return wikiSummary(h.title); }));
       var ansIdx = -1;
       for(var i=0;i<sums.length;i++){ if(sums[i] && (sums[i].extract || sums[i].description)){ ansIdx = i; break; } }
       if(ansIdx >= 0) frag.appendChild(answerCard(sums[ansIdx], top[ansIdx].title));
       var wrap = el("div","card");
-      top.forEach(function(h,i){ if(i === ansIdx) return; wrap.appendChild(resultRow(h, sums[i])); });
+      top.forEach(function(h,i){ if(i === ansIdx) return; wrap.appendChild(resultRow(h, sums[i] || null)); });
       if(wrap.childNodes.length){ frag.appendChild(label("Wikipedia")); frag.appendChild(wrap); }
+    }
+
+    // 2b) Internet Archive is also fast + CORS-friendly, so it renders right away too
+    var ia = await iaSearch(q, "").catch(function(){ return []; });
+    if(ia.length){
+      frag.appendChild(label("Internet Archive"));
+      frag.appendChild(iaList(ia.slice(0,4)));
     }
 
     // 3) web results in the background (never blocks)

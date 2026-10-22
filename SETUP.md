@@ -29,8 +29,8 @@ engines (Google, Bing, YouTube, Google Scholar, etc.) ke links bhi diye jaate ha
 - **Images** — Wikimedia Commons image grid + Google/Bing Images, Unsplash, Pexels, Openverse
 - **Videos** — Internet Archive videos + YouTube, Vimeo, Dailymotion
 - **Papers** — live results from Crossref, OpenAlex, arXiv + Google Scholar, Semantic Scholar, PubMed, CORE
-- **Data** — live results from Zenodo, GDELT, Wikidata + Google Dataset Search, data.gov.in, data.gov, World Bank, UN Data
-- **OSINT** — live results from GDELT, Wikidata, GLEIF, Wayback + crt.sh, urlscan.io, Shodan, OpenCorporates, OpenSanctions
+- **Data** — live results from Zenodo, Wikidata, Internet Archive + Google Dataset Search, data.gov.in, data.gov, World Bank, UN Data
+- **OSINT** — live results from Wikidata, GLEIF, Wayback + crt.sh, urlscan.io, Shodan, OpenCorporates, OpenSanctions
 - **Books/EPUB** — Internet Archive books + Project Gutenberg, Open Library, Standard Ebooks
 - **PDF** — Internet Archive PDFs + `filetype:pdf` searches
 - **PPT** — `filetype:ppt/pptx` + SlideShare
