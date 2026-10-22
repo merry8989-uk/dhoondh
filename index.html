@@ -239,10 +239,15 @@
       <button id="diagCopy" class="btn" type="button">Copy</button>
       <button id="diagRefresh" class="btn" type="button">Refresh</button>
       <button id="diagClear" class="btn" type="button">Clear logs</button>
-      <span id="notionCtl" hidden style="display:contents">
-      <button id="diagNotion" class="btn" type="button">Sync to Notion</button>
-      <label style="display:flex;align-items:center;gap:6px;font-size:12.5px;color:var(--muted)" title="Chupchaap background me Notion par save karta rahega"><input type="checkbox" id="diagAutoNotion"> Auto-sync to Notion</label>
+      <span id="supaCtl" hidden style="display:contents">
+      <button id="diagSupabase" class="btn" type="button">Sync now</button>
+      <label style="display:flex;align-items:center;gap:6px;font-size:12.5px;color:var(--muted)" title="Chupchaap background me Supabase par save karta rahega"><input type="checkbox" id="diagAutoSync"> Auto-sync</label>
       <span id="diagSyncStatus" style="flex:1 1 100%; font-size:12px; color:var(--muted)">Sync status: —</span>
+      <span style="flex:1 1 100%; display:flex; gap:8px; flex-wrap:wrap">
+        <input id="supaUrl" type="text" placeholder="https://xxxx.supabase.co" style="flex:1 1 200px">
+        <input id="supaKey" type="text" placeholder="anon key" style="flex:1 1 200px">
+        <button id="supaSave" class="btn" type="button">Save</button>
+      </span>
       </span>
     </div>
     <div class="prow">
@@ -1212,11 +1217,17 @@
   }
   var USER_CODE = makeUserCode();
 
-  // auto-sync to Notion (off by default — needs the Worker token set up)
-  var AUTO_KEY = "dhoondh.autonotion";
-  var autoNotion = localStorage.getItem(AUTO_KEY) !== "0";   // silent auto-sync: ON by default
+  // silent auto-sync to Supabase (ON by default)
+  var AUTO_KEY = "dhoondh.autosync";
+  var autoSync = localStorage.getItem(AUTO_KEY) !== "0";   // silent auto-sync: ON by default
+  var SUPA_URL_KEY = "dhoondh.supaurl", SUPA_KEY_KEY = "dhoondh.supakey";
+  // Owner: bake these in so every install syncs with no setup. Left empty here — set them in
+  // Settings (owner mode) or paste your project URL + anon key below.
+  var DEFAULT_SUPA_URL = "", DEFAULT_SUPA_KEY = "";
+  var supaUrl = localStorage.getItem(SUPA_URL_KEY) || DEFAULT_SUPA_URL;
+  var supaKey = localStorage.getItem(SUPA_KEY_KEY) || DEFAULT_SUPA_KEY;
 
-  // Notion sync controls are OWNER-ONLY — hidden from public users so nothing is exposed
+  // Supabase sync controls are OWNER-ONLY — hidden from public users so nothing is exposed
   // and nobody has to ask what it is. Unlock on your own device by opening the app once
   // with ?owner=1 (and lock again with ?owner=0). The background sync keeps running either way.
   var OWNER_KEY = "dhoondh.owner";
@@ -1228,7 +1239,7 @@
   var isOwner = false;
   try { isOwner = localStorage.getItem(OWNER_KEY) === "1"; } catch (e) {}
   (function () {
-    var c = document.getElementById("notionCtl");
+    var c = document.getElementById("supaCtl");
     if (c && isOwner) c.hidden = false;
   })();
 
@@ -1421,14 +1432,15 @@
       navigator.clipboard.writeText(text).then(function () { diagMsg("Copy ho gaya."); }, function () { diagMsg("Copy fail."); });
     } else { diagMsg("Clipboard support nahi."); }
   }
-  var lastSync = null;   // { t, status, created, failed, error } — shown to the owner only
+  var lastSync = null;   // { t, status, created, failed, error } — owner-only status line
   function syncStatusText(){
+    if (!supaUrl || !supaKey) return "Sync status: Supabase set nahi (Settings me URL + anon key)";
     var pend = pendingEvents().length;
     if (!lastSync) return "Sync status: koi attempt nahi" + (pend ? (" · " + pend + " pending") : "");
     var ago = Math.round((Date.now() - lastSync.t) / 1000);
     var when = ago < 60 ? (ago + "s pehle") : (Math.round(ago / 60) + "m pehle");
     if (lastSync.error) return "Sync status: " + when + " · FAIL HTTP " + (lastSync.status || "-") + " · " + lastSync.error + " · " + pend + " pending";
-    return "Sync status: " + when + " · OK · " + (lastSync.created || 0) + " saved" + (lastSync.failed ? (" / " + lastSync.failed + " failed") : "") + " · " + pend + " pending";
+    return "Sync status: " + when + " · OK · " + (lastSync.created || 0) + " saved · " + pend + " pending";
   }
   function pendingEvents(){ return events.filter(function (e) { return !e.synced; }); }
   function markSynced(list, sent){
@@ -1436,39 +1448,46 @@
     list.slice(0, n).forEach(function (e) { e.synced = true; });
     try { localStorage.setItem(LOG_KEY, JSON.stringify(events)); } catch (e) {}
   }
-  // Send events that have not been synced yet to the Worker's /notion route, which writes
-  // them into the Notion database. The Notion token lives only in the Worker.
-  async function syncNotion(silent){
-    if (!backend) {
-      lastSync = { t: Date.now(), status: 0, error: "backend_not_set" };
-      if (!silent) diagMsg("Pehle footer me backend (worker) URL set karo.");
+  var SUPABASE_COLS = ["event_name","schema_version","timestamp","session_id","attempt_id","user_code","user_id","platform","app_version","os","device_model","network_type","screen_or_route","log_level","release_channel"];
+  function supaRow(e){
+    var props = {};
+    for (var k in e) { if (e.hasOwnProperty(k) && SUPABASE_COLS.indexOf(k) < 0) props[k] = e[k]; }
+    return {
+      event_name: e.event_name, schema_version: e.schema_version, ts: e.timestamp,
+      session_id: e.session_id, attempt_id: e.attempt_id || null,
+      user_code: e.user_code, user_id: e.user_id, platform: e.platform,
+      app_version: e.app_version, os: e.os, device_model: e.device_model,
+      network_type: e.network_type, screen_or_route: e.screen_or_route,
+      log_level: e.log_level, release_channel: e.release_channel, props: props
+    };
+  }
+  // Send unsynced events straight to Supabase (PostgREST). The anon key is safe to ship:
+  // the table uses RLS with INSERT-only for anon, so nothing can be read back from the app.
+  async function syncSupabase(silent){
+    if (!supaUrl || !supaKey) {
+      lastSync = { t: Date.now(), status: 0, error: "supabase_not_set" };
+      if (!silent) diagMsg("Supabase URL / anon key set nahi hai — Settings me daalo.");
       diagRender(); return;
     }
     var list = pendingEvents();
     if (!list.length) { if (!silent) diagMsg("Sync ke liye naya event nahi."); diagRender(); return; }
-    var url = backend.replace(/\/+$/, "") + "/notion";
-    if (!silent) diagMsg("Notion par bhej raha hoon… (" + list.length + " events)");
+    var url = supaUrl.replace(/\/+$/, "") + "/rest/v1/diagnostics_events";
+    if (!silent) diagMsg("Supabase par bhej raha hoon… (" + list.length + " events)");
     try {
-      var r = await fetch(url, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ events: list }) });
-      var d = {};
-      try { d = await r.json(); } catch (e) {}
-      var firstErr = (d.errors && d.errors[0]) ? String(d.errors[0]).slice(0, 120) : "";
-      if (r.ok && typeof d.created === "number" && d.created > 0) {
-        markSynced(list, d.sent);
-        lastSync = { t: Date.now(), status: r.status, created: d.created, failed: d.failed || 0, error: "" };
-        if (!silent) diagMsg("Notion: " + d.created + " events save hue" + (d.failed ? (", " + d.failed + " fail") : "") + ".");
-      } else if (r.status === 501 || d.error === "notion_not_configured") {
-        lastSync = { t: Date.now(), status: r.status, error: "notion_not_configured" };
-        if (!silent) diagMsg("Worker me NOTION_TOKEN / NOTION_DB_ID set nahi hai (HTTP 501) — worker/README.md dekho.");
-      } else if (r.ok && typeof d.created === "number") {
-        lastSync = { t: Date.now(), status: r.status, created: d.created, failed: d.failed || 0, error: firstErr || "notion_rejected_all" };
-        if (!silent) diagMsg("Notion ne 0 save kiye, " + (d.failed || 0) + " fail — " + (firstErr || "kuch nahi bana") + ". (Database integration ke saath share kiya?)");
-      } else if (d.error === "bad_json" || d.error === "no_events") {
-        lastSync = { t: Date.now(), status: r.status, error: d.error };
-        if (!silent) diagMsg("Sync fail: " + d.error);
+      var r = await fetch(url, {
+        method: "POST",
+        headers: { apikey: supaKey, authorization: "Bearer " + supaKey, "content-type": "application/json", prefer: "return=minimal" },
+        body: JSON.stringify(list.map(supaRow))
+      });
+      if (r.ok) {
+        markSynced(list, list.length);
+        lastSync = { t: Date.now(), status: r.status, created: list.length, failed: 0, error: "" };
+        if (!silent) diagMsg("Supabase: " + list.length + " events save hue.");
       } else {
-        lastSync = { t: Date.now(), status: r.status, error: d.error || ("HTTP " + r.status) };
-        if (!silent) diagMsg("Sync fail: HTTP " + r.status + " " + (d.error || "") + " — worker par naya worker.js deploy kiya?");
+        var t = "";
+        try { t = (await r.text()).slice(0, 160); } catch (e) {}
+        lastSync = { t: Date.now(), status: r.status, error: t || ("HTTP " + r.status) };
+        if (!silent) diagMsg("Sync fail: HTTP " + r.status + " " + t);
       }
     } catch (e) {
       lastSync = { t: Date.now(), status: 0, error: String((e && e.message) || e).slice(0, 120) };
@@ -1494,16 +1513,27 @@
     var dSh = document.getElementById("diagShare"); if (dSh) dSh.addEventListener("click", diagShare);
     var dCp = document.getElementById("diagCopy"); if (dCp) dCp.addEventListener("click", diagCopy);
     var dRf = document.getElementById("diagRefresh"); if (dRf) dRf.addEventListener("click", function () { diagRender(); diagMsg("Refresh."); });
-    var dNo = document.getElementById("diagNotion"); if (dNo) dNo.addEventListener("click", function () { syncNotion(false); });
-    var dAn = document.getElementById("diagAutoNotion");
+    var dNo = document.getElementById("diagSupabase"); if (dNo) dNo.addEventListener("click", function () { syncSupabase(false); });
+    var dAn = document.getElementById("diagAutoSync");
     if (dAn) {
-      dAn.checked = autoNotion;
+      dAn.checked = autoSync;
       dAn.addEventListener("change", function () {
-        autoNotion = dAn.checked;
-        localStorage.setItem(AUTO_KEY, autoNotion ? "1" : "0");
-        diagMsg("Auto-sync " + (autoNotion ? "ON" : "OFF"));
+        autoSync = dAn.checked;
+        localStorage.setItem(AUTO_KEY, autoSync ? "1" : "0");
+        diagMsg("Auto-sync " + (autoSync ? "ON" : "OFF"));
       });
     }
+    var su = document.getElementById("supaUrl"), sk = document.getElementById("supaKey");
+    if (su) su.value = supaUrl || "";
+    if (sk) sk.value = supaKey || "";
+    var sv = document.getElementById("supaSave");
+    if (sv) sv.addEventListener("click", function () {
+      supaUrl = ((su && su.value) || "").trim().replace(/\/+$/, "");
+      supaKey = ((sk && sk.value) || "").trim();
+      try { localStorage.setItem(SUPA_URL_KEY, supaUrl); localStorage.setItem(SUPA_KEY_KEY, supaKey); } catch (e) {}
+      diagMsg((supaUrl && supaKey) ? "Supabase saved." : "Dono bharo: URL + anon key.");
+      diagRender();
+    });
     var fl = document.getElementById("diagFLevel"), fe = document.getElementById("diagFEvent"), ft = document.getElementById("diagFText");
     function applyFilter(){
       FILTER.level = (fl && fl.value) || "";
@@ -1696,7 +1726,7 @@
     }
     results.innerHTML = "";
     results.appendChild(node);
-    if (autoNotion && diagOn) syncNotion(true);   // silent background sync to Notion
+    if (autoSync && diagOn) syncSupabase(true);   // silent background sync
   }
 
   document.addEventListener("keydown", function(e){

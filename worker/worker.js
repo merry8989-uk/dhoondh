@@ -23,7 +23,7 @@ const UA =
 
 const CORS = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+  "Access-Control-Allow-Methods": "GET, OPTIONS",
   "Access-Control-Allow-Headers": "*"
 };
 
@@ -38,11 +38,6 @@ export default {
     if (request.method === "OPTIONS") return new Response(null, { headers: CORS });
 
     const url = new URL(request.url);
-
-    // Notion ingest: POST /notion { events: [...] } — writes straight into the
-    // "Dhoondh Diagnostics — Events" database. Needs NOTION_TOKEN + NOTION_DB_ID.
-    if (url.pathname.replace(/\/+$/, "").endsWith("/notion")) return await notionSync(request, env);
-
     const q = (url.searchParams.get("q") || "").trim();
     const debug = url.searchParams.get("debug") === "1";
     if (!q) return json({ error: "missing ?q= parameter", results: [] }, 400);
@@ -69,94 +64,6 @@ function json(obj, status) {
       ...CORS
     }
   });
-}
-
-/* ---------- Notion diagnostics ingest ----------
-   POST /notion  { "events": [ ... ] }
-   Worker env: NOTION_TOKEN (integration secret) + NOTION_DB_ID (database id).
-   The token stays in the Worker — the browser never sees it.
-*/
-const NOTION_VERSION = "2022-06-28";
-const MAX_PER_REQUEST = 40;
-
-async function notionSync(request, env) {
-  if (request.method !== "POST")
-    return json({ error: "use_post", message: "POST a JSON body: { events: [...] }" }, 405);
-  if (!env || !env.NOTION_TOKEN || !env.NOTION_DB_ID)
-    return json({
-      error: "notion_not_configured",
-      message: "Set Worker secret NOTION_TOKEN and variable NOTION_DB_ID (Cloudflare -> Settings -> Variables).",
-      received: 0
-    }, 501);
-
-  let body;
-  try { body = await request.json(); } catch (e) { return json({ error: "bad_json" }, 400); }
-  const events = Array.isArray(body && body.events) ? body.events : [];
-  if (!events.length) return json({ error: "no_events", received: 0 }, 400);
-  const slice = events.slice(0, MAX_PER_REQUEST);
-
-  let created = 0, failed = 0;
-  const errors = [];
-  for (const ev of slice) {
-    try {
-      const res = await fetch("https://api.notion.com/v1/pages", {
-        method: "POST",
-        headers: {
-          authorization: "Bearer " + env.NOTION_TOKEN,
-          "notion-version": NOTION_VERSION,
-          "content-type": "application/json"
-        },
-        body: JSON.stringify({ parent: { database_id: env.NOTION_DB_ID }, properties: toNotionProps(ev) })
-      });
-      if (res.ok) created++;
-      else {
-        failed++;
-        if (errors.length < 3) errors.push("HTTP " + res.status + " " + (await res.text()).slice(0, 180));
-      }
-    } catch (e) {
-      failed++;
-      if (errors.length < 3) errors.push(String((e && e.message) || e).slice(0, 180));
-    }
-    await new Promise((r) => setTimeout(r, 350)); // Notion allows ~3 requests/sec
-  }
-  return json({
-    ok: failed === 0, received: events.length, sent: slice.length, created, failed,
-    truncated: events.length > slice.length, errors
-  }, 200);
-}
-
-function rt(s) {
-  return { rich_text: s ? [{ text: { content: String(s).slice(0, 1900) } }] : [] };
-}
-function sel(s) {
-  return s ? { select: { name: String(s) } } : { select: null };
-}
-function toNotionProps(ev) {
-  ev = ev || {};
-  const base = ["event_name", "schema_version", "timestamp", "session_id", "attempt_id", "user_id",
-    "user_code", "platform", "app_version", "os", "device_model", "network_type", "screen_or_route",
-    "log_level", "release_channel", "schema_valid", "validation_error"];
-  const extra = {};
-  for (const k in ev) { if (!base.includes(k)) extra[k] = ev[k]; }
-  const stamp = String(ev.timestamp || "").slice(0, 16).replace("T", " ");
-  return {
-    "Log": { title: [{ text: { content: ((ev.event_name || "event") + " \u00b7 " + (ev.user_code || "?") + " \u00b7 " + stamp).slice(0, 200) } }] },
-    "User Code": rt(ev.user_code),
-    "Event Name": sel(ev.event_name),
-    "Level": sel(ev.log_level),
-    "Session": rt(ev.session_id),
-    "Attempt": rt(ev.attempt_id),
-    "Route": rt(ev.screen_or_route),
-    "Platform": sel(ev.platform),
-    "OS": rt(ev.os),
-    "Device": sel(ev.device_model),
-    "Network": rt(ev.network_type),
-    "Schema": rt(ev.schema_version),
-    "App Version": rt(ev.app_version),
-    "Release": sel(ev.release_channel),
-    "Timestamp": ev.timestamp ? { date: { start: ev.timestamp } } : { date: null },
-    "Details": rt(Object.keys(extra).length ? JSON.stringify(extra) : "")
-  };
 }
 
 /* ---------- parsing helpers ---------- */

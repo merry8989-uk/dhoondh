@@ -149,18 +149,16 @@ encryption at rest, centrally enforced retention, and session replay.
 - **Filters** — filter logs by **level**, **event name** and **free text**; the counter shows
   `shown / total`, and **exports respect the active filter** (export only the errors, or one
   event type).
-- **Notion** — the events schema mirrors a Notion database ("Dhoondh Diagnostics — Events") with
-  ready-made views: All events, Errors, Warnings, Friction signals, By user code. Import the
-  app's `.csv` export into it.
-- **Notion sync** — logs go to Notion **silently and automatically**: **Auto-sync is ON by
-  default**, so unsynced events are POSTed to your Worker's `/notion` route in the background and
-  land in the database, ready for a weekly review. The **Auto-sync to Notion** checkbox turns it
-  off; **Sync to Notion** forces a manual send. Events are marked synced only after a successful
-  reply, so nothing is lost or duplicated. One-time setup (Notion integration token + database
-  shared with it, set as Worker variables `NOTION_TOKEN` and `NOTION_DB_ID`) is in
-  `worker/README.md`.
-- **Owner-only UI** — the Notion controls are hidden from public users (they never see the
-  words "Notion" in the app). Open the app once with `?owner=1` on your own device to reveal
+- **Supabase** — events are stored in a Supabase table (`diagnostics_events`) with indexes on
+  time, user code, level and event name. The app writes straight to the Supabase REST API, so
+  no backend of your own is needed. Table + RLS + handy review queries: `supabase/schema.sql`.
+- **Supabase sync** — logs go to Supabase **silently and automatically**: **Auto-sync is ON by
+  default**, so unsynced events are POSTed to `<project>/rest/v1/diagnostics_events` in the
+  background, ready for a weekly review. Events are marked synced only after a successful reply,
+  so nothing is lost or duplicated. The anon key is safe to ship: the table uses RLS with
+  INSERT-only for `anon`, so nothing can be read back from the app.
+- **Owner-only UI** — the Supabase controls (project URL, anon key, sync status, manual sync)
+  are hidden from public users. Open the app once with `?owner=1` on your own device to reveal
   them (`?owner=0` to lock again). The silent background sync runs either way.
 
 ## Contact / Feedback

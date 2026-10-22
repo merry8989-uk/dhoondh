@@ -177,20 +177,17 @@ rest, centrally enforced retention, aur session replay.
 - **Filter** — logs ko **level**, **event name** aur **free text** se filter karo; counter
   `shown / total` dikhata hai, aur **export bhi filter ke hisaab se hota hai** (sirf errors, ya ek
   event type export karo).
-- **Notion** — events schema ek Notion database ("Dhoondh Diagnostics — Events") se match karta hai,
-  jisme ready views hain: All events, Errors, Warnings, Friction signals, By user code. App ka
-  `.csv` export usme import kar do.
-- **Notion sync** — logs Notion me **chupchaap aur apne aap** jaate hain: **Auto-sync default ON**
-  hai, isliye unsynced events background me aapke Worker ke `/notion` route par jaate hain aur
-  database me pahunch jaate hain — hafte me ek baar review karne ke liye ready. **Auto-sync to
-  Notion** checkbox se off kar sakte ho; **Sync to Notion** se zabardasti bhej sakte ho. Event sirf
-  successful reply ke baad synced mark hota hai — kuch khota ya duplicate nahi hota. Ek-baar ka
-  setup (Notion integration token + database share, Worker variables `NOTION_TOKEN` aur
-  `NOTION_DB_ID`) `worker/README.md` me hai.
-- **Ye Notion controls sirf OWNER ko dikhte hain** — public user ko Notion ka naam bhi nahi
-  dikhta (Settings panel me sirf logging consent, filter aur export rehte hain). Apne device par
-  ek baar app `?owner=1` ke saath kholo — controls unlock ho jaayenge (lock karne ke liye
-  `?owner=0`). Background sync dono haalat me chalta rehta hai.
+- **Supabase** — events ek Supabase table (`diagnostics_events`) me jaate hain, jisme time,
+  user code, level aur event name par index hain. App seedha Supabase REST API par likhti hai,
+  isliye apna koi backend nahi chahiye. Table + RLS + review queries: `supabase/schema.sql`.
+- **Supabase sync** — logs Supabase me **chupchaap aur apne aap** jaate hain: **Auto-sync default
+  ON** hai, isliye unsynced events background me `<project>/rest/v1/diagnostics_events` par jaate
+  hain — hafte me ek baar review karne ke liye ready. Event sirf successful reply ke baad synced
+  mark hota hai — kuch khota ya duplicate nahi hota. Anon key ship karna safe hai: table par RLS
+  hai jo `anon` ko sirf INSERT deta hai, padhne nahi.
+- **Owner-only UI** — Supabase controls (project URL, anon key, sync status, manual sync) public
+  users se chhupe rehte hain. Apne device par ek baar `?owner=1` se kholo — unlock ho jaayenge
+  (lock karne ke liye `?owner=0`). Background sync dono haalat me chalta rehta hai.
 
 ## Contact / Feedback
 
