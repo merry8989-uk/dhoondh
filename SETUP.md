@@ -148,23 +148,33 @@ Diagnostics **default ON** hain; toggle se off kar sakte ho.
 
 ### Logging standard (ProGallery Logging Spec v1.0)
 
-Events **structured JSON** hain (free text nahi), aur shared envelope follow karte hain:
-`event_name`, `schema_version`, `timestamp` (ISO-8601 UTC), `session_id`, `attempt_id`,
-`user_id`, `platform`, `app_version`, `os`, `device_model`, `network_type`,
-`screen_or_route`, `log_level`, `release_channel`.
+Events **structured JSON** hain (free text nahi). Har log me shared envelope hota hai:
+`timestamp`, `severity`, `category`, `message`, `app_id`, `environment`, `request_id` — saath me
+`event_name`, `schema_version`, `session_id`, `attempt_id`, `user_id`, `user_code`, `platform`,
+`app_version`, `os`, `device_model`, `network_type`, `screen_or_route`, `release_channel`, aur
+sanitized metadata `props` me.
 
+- **Severity:** trace / debug / info / warn / error / fatal. `warn` aur usse upar hamesha rakhe
+  jaate hain; neeche wale levels buffer bharne par sampled hote hain (>200 events).
+- **Category:** application, error, security, performance, user_activity, api_network, audit,
+  analytics, background_job (server_infra, database, debug_trace aage ke liye reserved).
+- **Message:** har event par chhota human-readable line.
 - **Naming:** `object_action` snake_case — jaise `search_performed`, `api_call`, `js_error`.
-- **Levels:** debug / info / warn / error. Errors 100%; info/debug buffer bharne par sampled.
-- **Correlation:** `session_id` har visit ka; `attempt_id` intent → outcome ko jodta hai.
+- **Correlation:** `session_id` har visit ka; `attempt_id` + `request_id` ek user action ko jodte hain.
 - **Retention:** 7 din / 500 events, load par enforce.
 - **Validation:** har event store hone se pehle schema se validate hota hai (`schema_valid` field).
 - **PII redaction (DPDP):** **raw search query kabhi log nahi hoti** — sirf `query_length`;
   API endpoint sirf host + route (jaise `/page/summary/ISRO` → `en.wikipedia.org/api/rest_v1`);
   full URLs with params, email/phone/name, raw file paths — kabhi nahi; `user_id` **salted hash**.
 - **Consent:** toggle opt-out hai; default ON.
-- **Events:** session_start, page_view, search_performed, search_no_results, api_call, js_error,
-  web_vitals, form_start/submit/abandon, feedback_submitted, conversion, error_state_shown —
-  aur friction signals: rage_click, dead_click, back_button_spam, scroll_depth, drop_off, time_to_first_value.
+- **Kya collect hota hai (category-wise):** application (session_start, search_no_results);
+  user_activity (page_view, search_performed, form_start/submit/abandon, dead_click, rage_click,
+  back_button_spam, feedback_submitted, filter_applied, export_created); api_network (api_call);
+  error (js_error, error_state_shown); performance (web_vitals, memory_usage); security
+  (permission_denied, storage_blocked, csp_violation, sync_unauthorized); audit (consent_changed,
+  logs_cleared, sync_config_changed); analytics (conversion, scroll_depth, drop_off,
+  time_to_first_value); background_job (sync_flush).
+
 
 Jo static client se possible nahi (saaf-saaf): CI schema validation, server-side encryption at
 rest, centrally enforced retention, aur session replay.

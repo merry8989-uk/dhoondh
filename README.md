@@ -116,27 +116,35 @@ Email or Share. Diagnostics are **ON by default** and can be switched off with t
 
 ### Logging standard (ProGallery Logging Spec v1.0)
 
-Events are **structured JSON**, not free text, and carry the shared envelope
-(`event_name`, `schema_version`, `timestamp` ISO-8601 UTC, `session_id`, `attempt_id`,
-`user_id`, `platform`, `app_version`, `os`, `device_model`, `network_type`,
-`screen_or_route`, `log_level`, `release_channel`).
+Events are **structured JSON**, not free text. Every log carries the shared envelope:
+`timestamp`, `severity`, `category`, `message`, `app_id`, `environment`, `request_id` — plus
+`event_name`, `schema_version`, `session_id`, `attempt_id`, `user_id`, `user_code`, `platform`,
+`app_version`, `os`, `device_model`, `network_type`, `screen_or_route`, `release_channel`, and
+sanitized metadata in `props`.
 
+- **Severity:** trace / debug / info / warn / error / fatal. `warn` and above are always kept;
+  the lower levels are sampled once the buffer is busy (>200 events).
+- **Category:** application, error, security, performance, user_activity, api_network, audit,
+  analytics, background_job (server_infra, database and debug_trace are reserved for later).
+- **Message:** a short human-readable line on every event.
 - **Naming:** `object_action` in snake_case — `search_performed`, `api_call`, `js_error`.
-- **Levels:** debug / info / warn / error. Errors stay at 100%; info/debug are sampled once
-  the buffer is busy (>200 events).
-- **Correlation:** `session_id` per visit; `attempt_id` groups intent → outcome.
+- **Correlation:** `session_id` per visit; `attempt_id` + `request_id` group one user action.
 - **Retention:** 7 days / 500 events, enforced on load; `schema_version` bumps on breaking changes.
 - **Validation:** every event is validated against the schema before it is stored
   (`schema_valid` is recorded on each event).
 - **PII redaction (DPDP-aligned):** raw search queries are **never** logged — only
   `query_length`; API endpoints are reduced to host + route (so `/page/summary/ISRO` becomes
-  `en.wikipedia.org/api/rest_v1`); full URLs with parameters, email / phone / name and raw
-  file paths are never logged; `user_id` is a **salted hash**, never a raw identifier.
+  `en.wikipedia.org/api/rest_v1`); full URLs with parameters, email / phone / name and raw file
+  paths are never logged; `user_id` is a **salted hash**, never a raw identifier.
 - **Consent:** the toggle is an opt-out for logging; default ON.
-- **Events:** session_start, page_view, search_performed, search_no_results, api_call,
-  js_error, web_vitals, form_start / form_submit / form_abandon, feedback_submitted,
-  conversion, error_state_shown — plus friction signals rage_click, dead_click,
-  back_button_spam, scroll_depth, drop_off, time_to_first_value.
+- **What is collected, by category:** application (session_start, search_no_results);
+  user_activity (page_view, search_performed, form_start/submit/abandon, dead_click, rage_click,
+  back_button_spam, feedback_submitted, filter_applied, export_created); api_network (api_call);
+  error (js_error, error_state_shown); performance (web_vitals, memory_usage); security
+  (permission_denied, storage_blocked, csp_violation, sync_unauthorized); audit (consent_changed,
+  logs_cleared, sync_config_changed); analytics (conversion, scroll_depth, drop_off,
+  time_to_first_value); background_job (sync_flush).
+
 
 Not possible from a static client (stated honestly): CI schema validation, server-side
 encryption at rest, centrally enforced retention, and session replay.

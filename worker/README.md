@@ -83,6 +83,6 @@ only ever calls *your* Worker.
 
 ## Diagnostics storage
 
-Log storage is **not** part of this Worker. The Dhoondh app writes diagnostics straight to
+Log storage (timestamp, severity, category, message, app_id, environment, request_id + metadata) is **not** part of this Worker. The Dhoondh app writes diagnostics straight to
 **Supabase** (its REST API) using an anon key with an INSERT-only RLS policy — see
 `supabase/schema.sql` in the repo root. This Worker only does search.

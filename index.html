@@ -222,10 +222,12 @@
       <span style="font-size:12.5px;color:var(--muted)">Filter:</span>
       <select id="diagFLevel" aria-label="Filter by level">
         <option value="">All levels</option>
+        <option value="trace">trace</option>
         <option value="debug">debug</option>
         <option value="info">info</option>
         <option value="warn">warn</option>
         <option value="error">error</option>
+        <option value="fatal">fatal</option>
       </select>
       <select id="diagFEvent" aria-label="Filter by event"><option value="">All events</option></select>
       <input id="diagFText" type="text" placeholder="text…" aria-label="Filter text">
@@ -1249,7 +1251,8 @@
   // ---------- diagnostics — ProGallery Logging Spec v1.0 (web side) ----------
   // Structured JSON events + common envelope + correlation ids + deliberate levels +
   // sampling at scale + retention + strict PII redaction (raw queries are NEVER logged).
-  var SCHEMA_VERSION = "1.0.0", APP_VERSION = "1.0.0", RELEASE_CHANNEL = "production";
+  var SCHEMA_VERSION = "1.1.0", APP_VERSION = "1.0.0", RELEASE_CHANNEL = "production";
+  var APP_ID = "dhoondh", ENVIRONMENT = "production";
   var DIAG_KEY = "dhoondh.diag", LOG_KEY = "dhoondh.logs", SALT_KEY = "dhoondh.salt";
   var RETENTION_DAYS = 7, MAX_EVENTS = 500;
   var diagOn = localStorage.getItem(DIAG_KEY) !== "0";   // consent / opt-out — ON by default
@@ -1336,7 +1339,7 @@
   var FILTER = { level: "", event: "", text: "" };
   function filteredEvents(){
     return events.filter(function (e) {
-      if (FILTER.level && e.log_level !== FILTER.level) return false;
+      if (FILTER.level && e.severity !== FILTER.level) return false;
       if (FILTER.event && e.event_name !== FILTER.event) return false;
       if (FILTER.text) { var s = JSON.stringify(e).toLowerCase(); if (s.indexOf(FILTER.text.toLowerCase()) < 0) return false; }
       return true;
@@ -1358,35 +1361,79 @@
     if (events.length > MAX_EVENTS) events = events.slice(-MAX_EVENTS);
   })();
 
-  var ENV_REQ = ["event_name", "schema_version", "timestamp", "session_id", "platform", "app_version", "os", "device_model", "screen_or_route", "log_level"];
-  var ENV_KEYS = ENV_REQ.concat(["attempt_id", "user_id", "user_code", "network_type", "release_channel"]);
-  var LEVELS = ["debug", "info", "warn", "error"];
+  // Every log carries: timestamp, severity, category, message, app_id, environment,
+  // request_id + sanitized metadata (per the logging-platform spec).
+  var ENV_REQ = ["event_name", "schema_version", "timestamp", "session_id", "platform", "app_version",
+                 "os", "device_model", "screen_or_route", "severity", "category", "message", "app_id", "environment"];
+  var ENV_KEYS = ENV_REQ.concat(["attempt_id", "request_id", "user_id", "user_code", "network_type", "release_channel"]);
+  var LEVELS = ["trace", "debug", "info", "warn", "error", "fatal"];
+  var CATEGORIES = ["application", "error", "security", "performance", "user_activity", "server_infra",
+                    "api_network", "database", "audit", "analytics", "background_job", "debug_trace"];
+  // event -> [category, default severity, human message]
+  var EVENTS = {
+    session_start:       ["application", "info", "Session started"],
+    page_view:           ["user_activity", "info", "Page viewed"],
+    search_performed:    ["user_activity", "info", "Search performed"],
+    search_no_results:   ["application", "warn", "Search returned no results"],
+    api_call:            ["api_network", "info", "API request"],
+    js_error:            ["error", "error", "JavaScript error"],
+    web_vitals:          ["performance", "info", "Web vitals measured"],
+    memory_usage:        ["performance", "info", "Memory usage sampled"],
+    form_start:          ["user_activity", "info", "Search form focused"],
+    form_submit:         ["user_activity", "info", "Search form submitted"],
+    form_abandon:        ["user_activity", "warn", "Search form abandoned"],
+    feedback_submitted:  ["user_activity", "info", "Feedback link opened"],
+    conversion:          ["analytics", "info", "Goal reached"],
+    error_state_shown:   ["error", "warn", "Error state displayed"],
+    rage_click:          ["user_activity", "warn", "Rage click detected"],
+    dead_click:          ["user_activity", "info", "Dead click detected"],
+    back_button_spam:    ["user_activity", "warn", "Back pressed repeatedly"],
+    scroll_depth:        ["analytics", "info", "Scroll depth recorded"],
+    drop_off:            ["analytics", "info", "Session ended"],
+    time_to_first_value: ["analytics", "info", "First value reached"],
+    consent_changed:     ["audit", "info", "Logging consent changed"],
+    filter_applied:      ["user_activity", "info", "Log filter applied"],
+    export_created:      ["user_activity", "info", "Diagnostics exported"],
+    logs_cleared:        ["audit", "warn", "Diagnostics logs cleared"],
+    sync_config_changed: ["audit", "info", "Sync configuration changed"],
+    sync_flush:          ["background_job", "info", "Background sync flushed"],
+    permission_denied:   ["security", "warn", "Permission denied"],
+    storage_blocked:     ["security", "warn", "Local storage unavailable"],
+    csp_violation:       ["security", "error", "Content security policy violation"],
+    sync_unauthorized:   ["security", "error", "Sync rejected by the server"]
+  };
   function validateEvent(ev){
     for (var i = 0; i < ENV_REQ.length; i++) { if (ev[ENV_REQ[i]] == null || ev[ENV_REQ[i]] === "") return "missing:" + ENV_REQ[i]; }
-    if (LEVELS.indexOf(ev.log_level) < 0) return "invalid:log_level";
+    if (LEVELS.indexOf(ev.severity) < 0) return "invalid:severity";
+    if (CATEGORIES.indexOf(ev.category) < 0) return "invalid:category";
     if (!/^[a-z][a-z0-9]*(_[a-z0-9]+)+$/.test(ev.event_name)) return "invalid:event_name";
     return null;
   }
   function envelope(name, level, props){
+    var meta = EVENTS[name] || ["application", "info", name];
     var ev = {
       event_name: name, schema_version: SCHEMA_VERSION, timestamp: new Date().toISOString(),
       session_id: SESSION_ID, platform: "web", app_version: APP_VERSION, os: OS_STR,
       device_model: DEVICE_CLASS, network_type: netType(), screen_or_route: routeName(),
-      log_level: level, release_channel: RELEASE_CHANNEL, user_id: USER_ID, user_code: USER_CODE
+      severity: level || meta[1] || "info", category: meta[0], message: meta[2] || name,
+      app_id: APP_ID, environment: ENVIRONMENT, release_channel: RELEASE_CHANNEL,
+      user_id: USER_ID, user_code: USER_CODE
     };
-    if (ATTEMPT) ev.attempt_id = ATTEMPT;
-    if (props) { for (var k in props) { if (Object.prototype.hasOwnProperty.call(props, k)) ev[k] = props[k]; } }
+    if (ATTEMPT) { ev.attempt_id = ATTEMPT; ev.request_id = ATTEMPT; }
+    // props must never overwrite an envelope field (that silently blanked event_name once)
+    if (props) { for (var k in props) { if (Object.prototype.hasOwnProperty.call(props, k) && ENV_KEYS.indexOf(k) < 0) ev[k] = props[k]; } }
     return ev;
   }
   function track(name, level, props){
     if (!diagOn) return;
-    level = level || "info";
-    // sampling "at scale": 100% of warn/error, info/debug sampled once the buffer is busy
-    if ((level === "info" || level === "debug") && events.length > 200 && Math.random() > 0.25) return;
-    var ev = envelope(name, level, props);
+    var meta = EVENTS[name] || ["application", "info", name];
+    var lvl = level || meta[1] || "info";
+    // sampling "at scale": 100% of warn/error/fatal, low levels sampled once the buffer is busy
+    if ((lvl === "info" || lvl === "debug" || lvl === "trace") && events.length > 200 && Math.random() > 0.25) return;
+    var ev = envelope(name, lvl, props);
     var bad = validateEvent(ev);
     ev.schema_valid = !bad;
-    if (bad) { ev.validation_error = bad; if (ev.log_level === "info" || ev.log_level === "debug") ev.log_level = "warn"; }
+    if (bad) { ev.validation_error = bad; if (ev.severity === "info" || ev.severity === "debug" || ev.severity === "trace") ev.severity = "warn"; }
     events.push(ev);
     if (events.length > MAX_EVENTS) events = events.slice(-MAX_EVENTS);
     try { localStorage.setItem(LOG_KEY, JSON.stringify(events)); } catch (e) {}
@@ -1399,7 +1446,7 @@
     return filteredEvents().map(function (e) {
       var extra = [];
       for (var k in e) { if (e.hasOwnProperty(k) && ENV_KEYS.indexOf(k) < 0 && k !== "schema_valid" && k !== "validation_error") extra.push(k + "=" + e[k]); }
-      return e.timestamp + "  [" + e.log_level + "]  " + e.event_name + "  route=" + e.screen_or_route +
+      return e.timestamp + "  [" + e.severity + "]  " + e.category + "  " + e.event_name + "  route=" + e.screen_or_route +
              "  sess=" + e.session_id + (e.attempt_id ? "  att=" + e.attempt_id : "") +
              (extra.length ? "  " + extra.join("  ") : "");
     }).join("\n");
@@ -1409,8 +1456,13 @@
     try { keys = Object.keys(localStorage).filter(function (k) { return k.indexOf("dhoondh") === 0; }).join(", "); } catch (e) {}
     return [
       "schema_version : " + SCHEMA_VERSION,
+      "app_id         : " + APP_ID,
+      "environment    : " + ENVIRONMENT,
       "app_version    : " + APP_VERSION,
       "release_channel: " + RELEASE_CHANNEL,
+      "log_model      : timestamp, severity, category, message, app_id, environment, request_id",
+      "severities     : " + LEVELS.join(", "),
+      "categories     : " + CATEGORIES.join(", "),
       "session_id     : " + SESSION_ID,
       "user_code      : " + USER_CODE + "  (readable per-device code)",
       "user_id        : " + USER_ID + "  (salted hash, no raw identifier)",
@@ -1461,6 +1513,7 @@
       a.href = URL.createObjectURL(blob); a.download = name;
       document.body.appendChild(a); a.click();
       setTimeout(function () { URL.revokeObjectURL(a.href); a.remove(); }, 800);
+      track("export_created", "info", { file_type: String(name).split(".").pop(), bytes: String(text).length });
       diagMsg("Download: " + name);
     } catch (e) { diagMsg("Download fail: " + e.message); }
   }
@@ -1518,8 +1571,9 @@
   function diagCopy(){
     var text = reportText();
     if (navigator.clipboard && navigator.clipboard.writeText) {
-      navigator.clipboard.writeText(text).then(function () { diagMsg("Copy ho gaya."); }, function () { diagMsg("Copy fail."); });
-    } else { diagMsg("Clipboard support nahi."); }
+      navigator.clipboard.writeText(text).then(function () { diagMsg("Copy ho gaya."); },
+        function () { track("permission_denied", "warn", { permission: "clipboard" }); diagMsg("Copy fail."); });
+    } else { track("permission_denied", "warn", { permission: "clipboard" }); diagMsg("Clipboard support nahi."); }
   }
   var lastSync = null;   // { t, status, created, failed, error } — owner-only status line
   function syncStatusText(){
@@ -1537,7 +1591,7 @@
     list.slice(0, n).forEach(function (e) { e.synced = true; });
     try { localStorage.setItem(LOG_KEY, JSON.stringify(events)); } catch (e) {}
   }
-  var SUPABASE_COLS = ["event_name","schema_version","timestamp","session_id","attempt_id","user_code","user_id","platform","app_version","os","device_model","network_type","screen_or_route","log_level","release_channel"];
+  var SUPABASE_COLS = ["event_name","schema_version","timestamp","session_id","attempt_id","request_id","user_code","user_id","platform","app_version","os","device_model","network_type","screen_or_route","severity","category","message","app_id","environment","release_channel"];
   function supaRow(e){
     var props = {};
     for (var k in e) { if (e.hasOwnProperty(k) && SUPABASE_COLS.indexOf(k) < 0) props[k] = e[k]; }
@@ -1547,7 +1601,9 @@
       user_code: e.user_code, user_id: e.user_id, platform: e.platform,
       app_version: e.app_version, os: e.os, device_model: e.device_model,
       network_type: e.network_type, screen_or_route: e.screen_or_route,
-      log_level: e.log_level, release_channel: e.release_channel, props: props
+      severity: e.severity, category: e.category, message: e.message,
+      app_id: e.app_id, environment: e.environment, request_id: e.request_id || null,
+      release_channel: e.release_channel, props: props
     };
   }
   // Send unsynced events straight to Supabase (PostgREST). The anon key is safe to ship:
@@ -1571,10 +1627,12 @@
       if (r.ok) {
         markSynced(list, list.length);
         lastSync = { t: Date.now(), status: r.status, created: list.length, failed: 0, error: "" };
+        track("sync_flush", "info", { rows: list.length, status_code: r.status });
         if (!silent) diagMsg("Supabase: " + list.length + " events save hue.");
       } else {
         var t = "";
         try { t = (await r.text()).slice(0, 160); } catch (e) {}
+        if (r.status === 401 || r.status === 403) track("sync_unauthorized", "error", { status_code: r.status });
         lastSync = { t: Date.now(), status: r.status, error: t || ("HTTP " + r.status) };
         if (!silent) diagMsg("Sync fail: HTTP " + r.status + " " + t);
       }
@@ -1620,6 +1678,7 @@
       supaUrl = ((su && su.value) || "").trim().replace(/\/+$/, "");
       supaKey = ((sk && sk.value) || "").trim();
       try { localStorage.setItem(SUPA_URL_KEY, supaUrl); localStorage.setItem(SUPA_KEY_KEY, supaKey); } catch (e) {}
+      track("sync_config_changed", "info", { configured: !!(supaUrl && supaKey) });
       diagMsg((supaUrl && supaKey) ? "Supabase saved." : "Dono bharo: URL + anon key.");
       diagRender();
     });
@@ -1628,6 +1687,7 @@
       FILTER.level = (fl && fl.value) || "";
       FILTER.event = (fe && fe.value) || "";
       FILTER.text = (ft && ft.value) || "";
+      track("filter_applied", "info", { filter_level: FILTER.level, filter_event: FILTER.event, has_text: !!FILTER.text, matched: filteredEvents().length });
       diagRender();
     }
     if (fl) fl.addEventListener("change", applyFilter);
@@ -1646,7 +1706,12 @@
       } else { diagMsg("User code: " + USER_CODE); }
     });
     var dCl = document.getElementById("diagClear");
-    if (dCl) dCl.addEventListener("click", function () { events = []; try { localStorage.removeItem(LOG_KEY); } catch (e) {} diagRender(); diagMsg("Logs clear."); });
+    if (dCl) dCl.addEventListener("click", function () {
+      var removed = events.length;
+      events = []; try { localStorage.removeItem(LOG_KEY); } catch (e) {}
+      track("logs_cleared", "warn", { removed_count: removed });
+      diagRender(); diagMsg("Logs clear.");
+    });
     Array.prototype.forEach.call(document.querySelectorAll("[data-fmt]"), function (b) {
       b.addEventListener("click", function () {
         var f = b.getAttribute("data-fmt");
@@ -1658,18 +1723,35 @@
     });
   })();
 
+  // ---- platform / security signals (categories: security, performance) ----
+  try { localStorage.setItem("dhoondh.__t", "1"); localStorage.removeItem("dhoondh.__t"); }
+  catch (e) { track("storage_blocked", "warn", { reason: "localStorage_unavailable" }); }
+  try {
+    document.addEventListener("securitypolicyviolation", function (ev) {
+      track("csp_violation", "error", { blocked_uri: safePath(ev.blockedURI || ""), directive: ev.violatedDirective || "" });
+    });
+  } catch (e) {}
+  window.addEventListener("pagehide", function () {
+    try {
+      if (performance && performance.memory) track("memory_usage", "info", {
+        used_mb: Math.round(performance.memory.usedJSHeapSize / 1048576),
+        limit_mb: Math.round(performance.memory.jsHeapSizeLimit / 1048576)
+      });
+    } catch (e) {}
+  });
+
   // ---- instrumentation: Part D (web events) + Part E (friction signals) ----
   track("session_start", "info", { start_type: "cold", cold_start_ms: Math.round(performance.now() || 0),
     viewport: window.innerWidth + "x" + window.innerHeight,
     tz: (((Intl.DateTimeFormat().resolvedOptions() || {}).timeZone) || "?") });
 
   window.addEventListener("error", function (e) {
-    track("js_error", "error", { error_type: "uncaught", message: String(e.message || "").slice(0, 200),
+    track("js_error", "error", { error_type: "uncaught", error_message: String(e.message || "").slice(0, 200),
       stack_hash: hashStr((e.filename || "") + ":" + (e.lineno || "")), url: safePath(location.href), browser: OS_STR });
   });
   window.addEventListener("unhandledrejection", function (e) {
     track("js_error", "error", { error_type: "unhandledrejection",
-      message: String((e.reason && e.reason.message) || e.reason || "").slice(0, 200),
+      error_message: String((e.reason && e.reason.message) || e.reason || "").slice(0, 200),
       stack_hash: hashStr(String((e.reason && e.reason.stack) || e.reason)), url: safePath(location.href), browser: OS_STR });
   });
 
