@@ -92,3 +92,35 @@ create policy "anon can insert diagnostics"
 -- who is using it:
 --   select user_code, count(*) as events, min(ts) as first_seen, max(ts) as last_seen
 --   from public.diagnostics_events group by 1 order by 2 desc;
+
+-- ---------- crash reporting & analytics queries ----------
+-- crashes (fatal) and suspected tab-kills:
+--   select ts, event_name, message, user_code, os, props->>'stack_head' as stack
+--   from public.diagnostics_events where severity = 'fatal' or event_name = 'session_crash_suspected'
+--   order by ts desc limit 50;
+-- JavaScript errors, grouped so you see the most frequent one first:
+--   select props->>'error_message' as error, count(*) as hits,
+--          min(ts) as first_seen, max(ts) as last_seen
+--   from public.diagnostics_events where event_name = 'js_error'
+--   group by 1 order by hits desc limit 30;
+-- failed resources (broken thumbnails, scripts):
+--   select props->>'resource' as kind, props->>'url' as url, count(*)
+--   from public.diagnostics_events where event_name = 'resource_error' group by 1,2 order by 3 desc;
+-- which results actually get clicked (by site):
+--   select props->>'host' as site, count(*) as clicks,
+--          round(avg((props->>'position')::numeric), 1) as avg_position
+--   from public.diagnostics_events where event_name = 'result_clicked'
+--   group by 1 order by clicks desc limit 30;
+-- which engine people hand off to (we are losing them to whom):
+--   select props->>'host' as engine, count(*) from public.diagnostics_events
+--   where event_name = 'engine_handoff' group by 1 order by 2 desc;
+-- tab usage (which verticals are worth keeping):
+--   select props->>'feature' as tab, count(*) from public.diagnostics_events
+--   where event_name = 'feature_used' group by 1 order by 2 desc;
+-- search funnel per session (searches -> results -> clicks):
+--   select session_id,
+--          count(*) filter (where event_name = 'search_performed')   as searches,
+--          count(*) filter (where event_name = 'search_no_results')  as empty_searches,
+--          count(*) filter (where event_name = 'result_clicked')     as clicks,
+--          count(*) filter (where event_name = 'form_abandon')       as abandons
+--   from public.diagnostics_events group by 1 having count(*) > 3 order by searches desc limit 50;

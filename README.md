@@ -140,10 +140,24 @@ sanitized metadata in `props`.
 - **What is collected, by category:** application (session_start, search_no_results);
   user_activity (page_view, search_performed, form_start/submit/abandon, dead_click, rage_click,
   back_button_spam, feedback_submitted, filter_applied, export_created); api_network (api_call);
-  error (js_error, error_state_shown); performance (web_vitals, memory_usage); security
-  (permission_denied, storage_blocked, csp_violation, sync_unauthorized); audit (consent_changed,
-  logs_cleared, sync_config_changed); analytics (conversion, scroll_depth, drop_off,
-  time_to_first_value); background_job (sync_flush).
+  error (js_error, error_state_shown, resource_error, console_error, crash,
+  session_crash_suspected); performance (web_vitals, memory_usage); security (permission_denied,
+  storage_blocked, csp_violation, sync_unauthorized); audit (consent_changed, logs_cleared,
+  sync_config_changed); analytics (conversion, scroll_depth, drop_off, time_to_first_value,
+  result_clicked, engine_handoff, feature_used); background_job (sync_flush).
+
+### Crash reporting
+
+- **Uncaught errors and unhandled rejections** → `js_error` (severity `error`) with a hashed
+  stack, the first 3 stack frames (URLs stripped of query strings), line/column and browser.
+- **Failed resource loads** (img/script/link/video) → `resource_error`, caught in the capture
+  phase because they never bubble.
+- **`console.error` output** → `console_error` breadcrumbs, so you see what was logged just
+  before a crash.
+- **A render failure** → `crash` with severity **`fatal`**.
+- **A session that never logged `drop_off`** → on the next load the app records
+  `session_crash_suspected` with the previous `session_id`, which is how a browser-killed tab
+  or an out-of-memory crash shows up.
 
 
 Not possible from a static client (stated honestly): CI schema validation, server-side

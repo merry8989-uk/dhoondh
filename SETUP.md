@@ -170,10 +170,22 @@ sanitized metadata `props` me.
 - **Kya collect hota hai (category-wise):** application (session_start, search_no_results);
   user_activity (page_view, search_performed, form_start/submit/abandon, dead_click, rage_click,
   back_button_spam, feedback_submitted, filter_applied, export_created); api_network (api_call);
-  error (js_error, error_state_shown); performance (web_vitals, memory_usage); security
-  (permission_denied, storage_blocked, csp_violation, sync_unauthorized); audit (consent_changed,
-  logs_cleared, sync_config_changed); analytics (conversion, scroll_depth, drop_off,
-  time_to_first_value); background_job (sync_flush).
+  error (js_error, error_state_shown, resource_error, console_error, crash,
+  session_crash_suspected); performance (web_vitals, memory_usage); security (permission_denied,
+  storage_blocked, csp_violation, sync_unauthorized); audit (consent_changed, logs_cleared,
+  sync_config_changed); analytics (conversion, scroll_depth, drop_off, time_to_first_value,
+  result_clicked, engine_handoff, feature_used); background_job (sync_flush).
+
+### Crash reporting
+
+- **Uncaught errors / unhandled rejections** → `js_error` (severity `error`) — hashed stack,
+  pehle 3 stack frames (URL se query hata kar), line/column, browser.
+- **Resource load fail** (img/script/link/video) → `resource_error` (capture phase se, kyunki ye
+  bubble nahi hote).
+- **`console.error`** → `console_error` breadcrumb — crash se just pehle kya log hua, pata chalta hai.
+- **Render fail** → `crash`, severity **`fatal`**.
+- **Jis session me `drop_off` nahi aaya** → next load par `session_crash_suspected` (previous
+  session_id ke saath) — isi se tab-kill / out-of-memory crash pakda jaata hai.
 
 
 Jo static client se possible nahi (saaf-saaf): CI schema validation, server-side encryption at

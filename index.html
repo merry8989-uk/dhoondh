@@ -768,6 +768,7 @@
       b.textContent = t[1];
       b.addEventListener("click", function(){
         tab = t[0];
+        track("feature_used", "info", { feature: t[0] });
         var u = new URL(location.href); u.searchParams.set("tab", tab);
         history.replaceState(null, "", u);
         render();
@@ -1262,6 +1263,13 @@
   function rnd(p){ return p + Math.random().toString(36).slice(2, 8); }
   function hashStr(s){ var h = 0; s = String(s || ""); for (var i = 0; i < s.length; i++) { h = ((h << 5) - h + s.charCodeAt(i)) | 0; } return Math.abs(h).toString(36); }
   function safePath(u){ try { return new URL(u, location.href).pathname; } catch (e) { return String(u).split("?")[0].slice(0, 120); } }
+  // first few stack frames, with URLs stripped of query strings (crash context, no PII)
+  function stackHead(e){
+    try {
+      return String((e && e.stack) || "").split("\n").slice(0, 3).join(" | ")
+        .replace(/https?:\/\/[^\s)]+/g, function (u) { return safePath(u); }).slice(0, 300);
+    } catch (err) { return ""; }
+  }
   // endpoint id for api_call: host + at most two path segments, so identifiers that live
   // in the path (e.g. /page/summary/ISRO) are never logged.
   function endpointOf(u){
@@ -1360,6 +1368,19 @@
     events = events.filter(function (e) { var t = Date.parse(e.timestamp); return isNaN(t) || t >= cut; });
     if (events.length > MAX_EVENTS) events = events.slice(-MAX_EVENTS);
   })();
+  (function () {   // crash detection: a session that never logged drop_off died uncleanly
+    try {
+      var prev = null;
+      for (var i = events.length - 1; i >= 0; i--) {
+        if (events[i].session_id && events[i].session_id !== SESSION_ID) { prev = events[i].session_id; break; }
+      }
+      if (!prev) return;
+      var clean = events.some(function (e) {
+        return e.session_id === prev && (e.event_name === "drop_off" || e.event_name === "session_end");
+      });
+      if (!clean) track("session_crash_suspected", "warn", { previous_session_id: prev, reason: "no_clean_session_end" });
+    } catch (e) {}
+  })();
 
   // Every log carries: timestamp, severity, category, message, app_id, environment,
   // request_id + sanitized metadata (per the logging-platform spec).
@@ -1400,7 +1421,14 @@
     permission_denied:   ["security", "warn", "Permission denied"],
     storage_blocked:     ["security", "warn", "Local storage unavailable"],
     csp_violation:       ["security", "error", "Content security policy violation"],
-    sync_unauthorized:   ["security", "error", "Sync rejected by the server"]
+    sync_unauthorized:   ["security", "error", "Sync rejected by the server"],
+    resource_error:      ["error", "warn", "Resource failed to load"],
+    console_error:       ["error", "warn", "Console error captured"],
+    crash:               ["error", "fatal", "App crashed while rendering"],
+    session_crash_suspected: ["error", "warn", "Previous session ended uncleanly"],
+    result_clicked:      ["analytics", "info", "Result clicked"],
+    engine_handoff:      ["analytics", "info", "Handed off to another engine"],
+    feature_used:        ["analytics", "info", "Feature used"]
   };
   function validateEvent(ev){
     for (var i = 0; i < ENV_REQ.length; i++) { if (ev[ENV_REQ[i]] == null || ev[ENV_REQ[i]] === "") return "missing:" + ENV_REQ[i]; }
@@ -1745,10 +1773,51 @@
     viewport: window.innerWidth + "x" + window.innerHeight,
     tz: (((Intl.DateTimeFormat().resolvedOptions() || {}).timeZone) || "?") });
 
+  // capture phase so failed <img>/<script>/<link> loads are caught too (they never bubble)
   window.addEventListener("error", function (e) {
+    var t = e && e.target;
+    if (t && t !== window && t.tagName && /^(IMG|SCRIPT|LINK|VIDEO|AUDIO|SOURCE)$/.test(t.tagName)) {
+      track("resource_error", "warn", { resource: t.tagName.toLowerCase(),
+        url: safePath(t.src || t.href || t.currentSrc || ""), page: routeName() });
+      return;
+    }
     track("js_error", "error", { error_type: "uncaught", error_message: String(e.message || "").slice(0, 200),
-      stack_hash: hashStr((e.filename || "") + ":" + (e.lineno || "")), url: safePath(location.href), browser: OS_STR });
-  });
+      stack_hash: hashStr((e.filename || "") + ":" + (e.lineno || "")), stack_head: stackHead(e.error || e),
+      line: e.lineno || 0, col: e.colno || 0, url: safePath(location.href), browser: OS_STR });
+  }, true);
+
+  (function () {   // console.error as crash breadcrumbs
+    try {
+      if (!window.console || !console.error) return;
+      var orig = console.error;
+      console.error = function () {
+        try {
+          var txt = Array.prototype.slice.call(arguments).map(function (a) {
+            return typeof a === "string" ? a : ((a && a.message) || "");
+          }).join(" ").slice(0, 160);
+          if (txt) track("console_error", "warn", { console_text: txt });
+        } catch (e) {}
+        return orig.apply(console, arguments);
+      };
+    } catch (e) {}
+  })();
+
+  // analytics: which results and which engine hand-offs actually get clicked
+  document.addEventListener("click", function (e) {
+    var el = e.target;
+    var a = (el && el.closest) ? el.closest("a") : null;
+    if (!a) return;
+    var href = a.getAttribute("href") || "";
+    if (!/^https?:/i.test(href)) return;
+    var host = ""; try { host = new URL(href).hostname.replace(/^www\./, ""); } catch (err) { return; }
+    if (host === location.hostname) return;
+    if (a.closest(".result")) {
+      var links = document.querySelectorAll("#results .result a");
+      track("result_clicked", "info", { position: Array.prototype.indexOf.call(links, a) + 1, host: host, route: routeName() });
+    } else if (/\bbtn\b/.test(String(a.className))) {
+      track("engine_handoff", "info", { host: host, route: routeName() });
+    }
+  }, true);
   window.addEventListener("unhandledrejection", function (e) {
     track("js_error", "error", { error_type: "unhandledrejection",
       error_message: String((e.reason && e.reason.message) || e.reason || "").slice(0, 200),
@@ -1893,6 +1962,7 @@
         default:        node = await tabAll();
       }
     }catch(e){
+      track("crash", "fatal", { error_type: "render_failed", error_message: String((e && e.message) || e).slice(0, 200), stack_head: stackHead(e) });
       node = el("div","card","Kuchh load nahi hua — dobara try karo.");
     }
     results.innerHTML = "";
