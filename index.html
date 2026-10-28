@@ -1997,5 +1997,229 @@
   render();
 })();
 </script>
+
+<!-- Explore more apps by us - cross-promotion for our other apps.
+     The list is generated per app and never includes the app it is shown in. -->
+<style>
+#osx-explore{max-width:780px;margin:48px auto 32px;padding:0 18px;font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;text-align:left}
+#osx-explore h2{font-size:20px;margin:0 0 4px;font-weight:700}
+#osx-explore .osx-sub{margin:0 0 18px;font-size:13px;opacity:.7}
+#osx-explore .osx-row{display:flex;align-items:center;gap:14px;padding:13px 15px;border:1px solid rgba(128,128,128,.28);border-radius:14px;margin-bottom:10px;flex-wrap:wrap}
+#osx-explore .osx-txt{flex:1 1 220px;min-width:0}
+#osx-explore .osx-name{font-weight:600;font-size:15px}
+#osx-explore .osx-tag{font-size:12.5px;opacity:.72;margin-top:2px;line-height:1.4}
+#osx-explore .osx-btn{flex:0 0 auto;border:0;border-radius:10px;padding:9px 15px;font-size:13px;font-weight:600;cursor:pointer;background:#2563eb;color:#fff;text-decoration:none;white-space:nowrap;display:inline-block}
+#osx-explore .osx-btn:hover{filter:brightness(1.1)}
+#osx-explore .osx-prog{flex:1 1 100%;display:none}
+#osx-explore .osx-bar{height:6px;border-radius:99px;background:rgba(128,128,128,.25);overflow:hidden;margin-top:6px}
+#osx-explore .osx-fill{height:100%;width:0;background:#2563eb;transition:width .12s linear}
+#osx-explore .osx-note{font-size:11.5px;opacity:.7;margin-top:5px}
+</style>
+<section id="osx-explore">
+  <h2>Explore more apps by us</h2>
+  <p class="osx-sub">Other apps we build. Free, no ads, no accounts.</p>
+  <div id="osx-list"></div>
+</section>
+<script>
+(function(){
+  var APPS=[
+  {
+    "name": "Chronos",
+    "tagline": "Exact alarms with holiday skipping, world clock, timer presets, lap stopwatch",
+    "url": "https://merry8989-uk.github.io/chronos-clock/",
+    "label": "Open",
+    "kind": "page"
+  },
+  {
+    "name": "Universal AI Calculator",
+    "tagline": "Standard, scientific, unit converter, programmer, date tools + 47 calculators",
+    "url": "https://merry8989-uk.github.io/universal-ai-calculator/",
+    "label": "Open",
+    "kind": "page"
+  },
+  {
+    "name": "ProGallery",
+    "tagline": "Full-featured gallery: MediaStore indexing, duplicate detection, photo/video editing",
+    "url": "https://github.com/merry8989-uk/pro-gallery-android",
+    "label": "View repo",
+    "kind": "repo"
+  },
+  {
+    "name": "Kavach",
+    "tagline": "Indian-first AI caller ID, smart blocking, call recording, AI call assistant",
+    "url": "https://merry8989-uk.github.io/kavach/",
+    "label": "Open",
+    "kind": "page"
+  },
+  {
+    "name": "Low Distraction Launcher",
+    "tagline": "Minimal text-only launcher, no icons, no feeds, no internet access",
+    "url": "https://merry8989-uk.github.io/lowdistraction-launcher/",
+    "label": "Open",
+    "kind": "page"
+  },
+  {
+    "name": "FloatScript",
+    "tagline": "Transparent floating teleprompter for Android",
+    "url": "https://github.com/merry8989-uk/floatscript",
+    "label": "View repo",
+    "kind": "repo"
+  },
+  {
+    "name": "Camara",
+    "tagline": "Camera + editor: filters, stickers, beauty tools, teleprompter, image & video editing",
+    "url": "https://merry8989-uk.github.io/camara-app/",
+    "label": "Open",
+    "kind": "page"
+  },
+  {
+    "name": "Powerbase",
+    "tagline": "Self-hosted diagnostics client: dashboards, log explorer, crash groups, devices, alerts",
+    "url": "https://merry8989-uk.github.io/powerbase-app/",
+    "label": "Open",
+    "kind": "page"
+  },
+  {
+    "name": "Local AI Keyboard",
+    "tagline": "Offline privacy-first keyboard with on-device LLM for writing and corrections",
+    "url": "https://github.com/merry8989-uk/local-ai-keyboard",
+    "label": "View repo",
+    "kind": "repo"
+  },
+  {
+    "name": "Arrow Puzzle Advanced",
+    "tagline": "12,000 guaranteed-solvable arrow puzzles (6,000 Classic + 6,000 Escape)",
+    "url": "https://raw.githubusercontent.com/merry8989-uk/arrow-puzzle-advanced/main/dist/ArrowPuzzleAdvanced-5.11.apk",
+    "label": "Download APK",
+    "kind": "apk"
+  },
+  {
+    "name": "New Arrow Puzzle",
+    "tagline": "Offline HTML5 arrow-clearing game, 12,000 verified levels, hard mode from 25",
+    "url": "https://merry8989-uk.github.io/new-arrow-puzzle/",
+    "label": "Open",
+    "kind": "page"
+  },
+  {
+    "name": "PDF Toolkit",
+    "tagline": "Merge, split, rotate, watermark, convert, protect PDFs in the browser. No uploads",
+    "url": "https://merry8989-uk.github.io/pdf-toolkit/",
+    "label": "Open",
+    "kind": "page"
+  },
+  {
+    "name": "Doc Viewer & Editor",
+    "tagline": "Open, edit, convert, compress, merge docs, images, sheets, PDFs, ebooks",
+    "url": "https://merry8989-uk.github.io/doc-viewer-editor/",
+    "label": "Open",
+    "kind": "page"
+  },
+  {
+    "name": "Pulse",
+    "tagline": "Social feed for text, photos and video. Single-file static site",
+    "url": "https://merry8989-uk.github.io/pulse-feed/",
+    "label": "Open",
+    "kind": "page"
+  },
+  {
+    "name": "KaamSetu",
+    "tagline": "Job vacancy portal with employer posting and admin moderation",
+    "url": "https://merry8989-uk.github.io/kaamsetu-job-portal/",
+    "label": "Open",
+    "kind": "page"
+  },
+  {
+    "name": "48 Laws of Power",
+    "tagline": "Hindi notes, mindmap, examples and usage for the 48 laws",
+    "url": "https://merry8989-uk.github.io/48-laws-of-power/",
+    "label": "Open",
+    "kind": "page"
+  },
+  {
+    "name": "On This Day",
+    "tagline": "Daily bilingual Hindi + English history briefing, static site",
+    "url": "https://merry8989-uk.github.io/on-this-day/",
+    "label": "Open",
+    "kind": "page"
+  },
+  {
+    "name": "USB Screen Mirror",
+    "tagline": "Low-latency Android-to-Windows USB mirroring, scrcpy wrapper with GUI",
+    "url": "https://github.com/merry8989-uk/usb-screen-mirror",
+    "label": "View repo",
+    "kind": "repo"
+  },
+  {
+    "name": "Sangam",
+    "tagline": "India-hosted social + video platform on its own stack",
+    "url": "https://github.com/merry8989-uk/sangam",
+    "label": "View repo",
+    "kind": "repo"
+  },
+  {
+    "name": "Powerbase Server",
+    "tagline": "Self-hosted observability: log ingestion, explorer, traces, metrics, alerting",
+    "url": "https://github.com/merry8989-uk/powerbase-server",
+    "label": "View repo",
+    "kind": "repo"
+  }
+];
+  function el(t,c,x){var n=document.createElement(t);if(c)n.className=c;if(x!=null)n.textContent=x;return n;}
+
+  /* Real download with a live progress bar for entries that are an actual file
+     (an APK). Everything else is a plain link to that app's page. */
+  function dl(url,btn,prog,fill,note){
+    if(!window.fetch||!window.ReadableStream){window.location.href=url;return;}
+    prog.style.display="block";btn.disabled=true;btn.style.opacity=".6";
+    note.textContent="Starting download...";
+    fetch(url).then(function(res){
+      if(!res.ok)throw new Error("HTTP "+res.status);
+      var total=Number(res.headers.get("content-length")||0),got=0,chunks=[],reader=res.body.getReader();
+      function pump(){
+        return reader.read().then(function(r){
+          if(r.done)return chunks;
+          chunks.push(r.value);got+=r.value.length;
+          if(total){var p=Math.min(100,Math.round(got/total*100));fill.style.width=p+"%";
+            note.textContent=p+"% of "+(total/1048576).toFixed(1)+" MB";}
+          else{fill.style.width="100%";note.textContent=(got/1048576).toFixed(1)+" MB downloaded";}
+          return pump();
+        });
+      }
+      return pump();
+    }).then(function(chunks){
+      var blob=new Blob(chunks,{type:"application/vnd.android.package-archive"});
+      var a=document.createElement("a");
+      a.href=URL.createObjectURL(blob);a.download=url.split("/").pop()||"app.apk";
+      document.body.appendChild(a);a.click();
+      setTimeout(function(){URL.revokeObjectURL(a.href);a.remove();},2000);
+      fill.style.width="100%";note.textContent="Saved to your Downloads folder.";
+      btn.disabled=false;btn.style.opacity="1";
+    }).catch(function(){
+      note.textContent="Direct download blocked - opening the file instead.";
+      window.location.href=url;
+    });
+  }
+
+  var list=document.getElementById("osx-list");
+  APPS.forEach(function(app){
+    var row=el("div","osx-row"),txt=el("div","osx-txt");
+    txt.appendChild(el("div","osx-name",app.name));
+    txt.appendChild(el("div","osx-tag",app.tagline));
+    row.appendChild(txt);
+    if(app.kind==="apk"){
+      var prog=el("div","osx-prog"),bar=el("div","osx-bar"),fill=el("div","osx-fill"),note=el("div","osx-note","");
+      bar.appendChild(fill);prog.appendChild(bar);prog.appendChild(note);
+      var btn=el("button","osx-btn",app.label);
+      btn.addEventListener("click",function(){dl(app.url,btn,prog,fill,note);});
+      row.appendChild(btn);row.appendChild(prog);
+    }else{
+      var a=el("a","osx-btn",app.label);a.href=app.url;a.target="_blank";a.rel="noopener";
+      row.appendChild(a);
+    }
+    list.appendChild(row);
+  });
+})();
+</script>
+
 </body>
 </html>
